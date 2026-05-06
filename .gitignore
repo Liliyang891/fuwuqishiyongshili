@@ -1,0 +1,10 @@
+# 敏感配置（包含 API Key 和密码，不要提交到版本控制）
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.db
+
+# IDE / 工具
+.claude/

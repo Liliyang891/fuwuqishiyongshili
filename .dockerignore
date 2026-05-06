@@ -1,0 +1,20 @@
+# Python 缓存
+__pycache__/
+*.pyc
+*.pyo
+
+# IDE 配置
+.vscode/
+.idea/
+
+# 客户端和数据库文件（不需要在服务器镜像里）
+gui_client.py
+setup_sample_db.py
+sample_data.db
+
+# 已有的 gitignore 内容
+.git/
+.gitignore
+
+# 日志
+*.log
