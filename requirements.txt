@@ -1,2 +1,8 @@
+# === 核心依赖 ===
 paramiko>=3.0
 python-dotenv>=1.0
+
+# === 语音输入（GUI客户端，可选） ===
+# pip install SpeechRecognition pyaudio
+# speech_recognition>=3.10
+# pyaudio>=0.2

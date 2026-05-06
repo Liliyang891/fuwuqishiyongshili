@@ -17,6 +17,7 @@ REMOTE_DIR = os.environ.get('REMOTE_DIR', '/root/fuwuqishiyongshili')
 
 LOCAL_FILES = [
     'web_server.py',
+    'tools.py',
     '.env',
     'gui_client.py',
     'requirements.txt',
