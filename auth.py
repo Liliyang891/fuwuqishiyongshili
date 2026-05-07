@@ -129,7 +129,7 @@ def get_user_by_token(token):
     row = conn.execute(
         '''SELECT u.id, u.username, u.email, u.role, u.department_id, u.is_active
            FROM user_sessions s JOIN users u ON s.user_id = u.id
-           WHERE s.token=? AND s.expires_at > ?''',
+           WHERE s.token=? AND s.expires_at > ? AND u.is_active = 1''',
         (token, now)
     ).fetchone()
     conn.close()
