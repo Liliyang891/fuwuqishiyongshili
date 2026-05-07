@@ -10,6 +10,7 @@ import json
 import sqlite3
 import shutil
 import hashlib
+import time
 import zipfile
 import tarfile
 import fnmatch
@@ -82,7 +83,7 @@ def _human_size(size):
 # ========== 数据库初始化 ==========
 
 def _init_db():
-    """初始化 SQLite 数据库"""
+    """初始化 SQLite 数据库（元数据表 + 会话表）"""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute('''
@@ -95,13 +96,116 @@ def _init_db():
         "INSERT OR REPLACE INTO _meta (key, value) VALUES (?, ?)",
         ('created_at', datetime.now().isoformat())
     )
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS sessions (
+            session_id TEXT PRIMARY KEY,
+            messages TEXT NOT NULL DEFAULT '[]',
+            last_active REAL NOT NULL,
+            created_at REAL NOT NULL
+        )
+    ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS departments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT UNIQUE NOT NULL,
+            created_at REAL
+        )
+    ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE NOT NULL,
+            email TEXT UNIQUE,
+            password_hash TEXT NOT NULL,
+            role TEXT NOT NULL DEFAULT 'guest',
+            department_id INTEGER,
+            is_active INTEGER DEFAULT 1,
+            created_at REAL,
+            FOREIGN KEY (department_id) REFERENCES departments(id)
+        )
+    ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS user_sessions (
+            token TEXT PRIMARY KEY,
+            user_id INTEGER NOT NULL,
+            created_at REAL,
+            expires_at REAL,
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        )
+    ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS audit_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            action TEXT NOT NULL,
+            detail TEXT,
+            created_at REAL
+        )
+    ''')
     conn.commit()
     conn.close()
 
 
 def _get_db_conn():
     """获取数据库连接"""
-    return sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+# ========== 会话持久化 ==========
+
+def save_session(session_id, messages, session_ttl=3600):
+    """保存或更新会话到数据库"""
+    conn = _get_db_conn()
+    cursor = conn.cursor()
+    now = time.time()
+    cursor.execute('''
+        INSERT OR REPLACE INTO sessions (session_id, messages, last_active, created_at)
+        VALUES (?, ?, ?, COALESCE((SELECT created_at FROM sessions WHERE session_id=?), ?))
+    ''', (session_id, json.dumps(messages, ensure_ascii=False), now, session_id, now))
+    conn.commit()
+    conn.close()
+
+
+def load_session(session_id, session_ttl=3600):
+    """从数据库加载会话，过期返回空列表"""
+    conn = _get_db_conn()
+    cursor = conn.cursor()
+    now = time.time()
+    cursor.execute(
+        'SELECT messages, last_active FROM sessions WHERE session_id=?',
+        (session_id,)
+    )
+    row = cursor.fetchone()
+    conn.close()
+    if row and now - row['last_active'] <= session_ttl:
+        # 更新最后活跃时间
+        save_session(session_id, json.loads(row['messages']), session_ttl)
+        return json.loads(row['messages'])
+    return []
+
+
+def delete_session(session_id):
+    """删除会话"""
+    conn = _get_db_conn()
+    cursor = conn.cursor()
+    cursor.execute('DELETE FROM sessions WHERE session_id=?', (session_id,))
+    conn.commit()
+    conn.close()
+
+
+def cleanup_sessions_db(session_ttl=3600):
+    """清理过期会话"""
+    conn = _get_db_conn()
+    cursor = conn.cursor()
+    now = time.time()
+    cursor.execute(
+        'DELETE FROM sessions WHERE ? - last_active > ?',
+        (now, session_ttl)
+    )
+    conn.commit()
+    conn.close()
 
 
 # ========== 📁 目录操作（5个） ==========
