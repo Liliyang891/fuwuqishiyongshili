@@ -86,6 +86,7 @@ def _init_db():
     """初始化 SQLite 数据库（元数据表 + 会话表）"""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
+    cursor.execute("PRAGMA foreign_keys = ON")
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS _meta (
             key TEXT PRIMARY KEY,
@@ -139,7 +140,8 @@ def _init_db():
             user_id INTEGER,
             action TEXT NOT NULL,
             detail TEXT,
-            created_at REAL
+            created_at REAL,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
         )
     ''')
     conn.commit()
@@ -150,6 +152,7 @@ def _get_db_conn():
     """获取数据库连接"""
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
     return conn
 
 
