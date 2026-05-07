@@ -80,5 +80,4 @@ def register_user(username, password, email=None):
         'role_name': '游客',
         'department_id': None,
         'is_active': 1,
-        'password_hash': password_hash,
     }

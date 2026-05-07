@@ -56,10 +56,9 @@ def test_register_password_too_short():
 
 def test_password_hashing():
     import auth
-    user = auth.register_user('hashuser', 'mypassword')
-    assert user['password_hash'].startswith('$2b$')
-    # 验证密码不存明文
+    auth.register_user('hashuser', 'mypassword')
     conn = _get_db_conn()
     row = conn.execute('SELECT password_hash FROM users WHERE username=?', ('hashuser',)).fetchone()
     conn.close()
+    assert row[0].startswith('$2b$')
     assert 'mypassword' not in row[0]
