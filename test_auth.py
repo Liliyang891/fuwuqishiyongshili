@@ -12,8 +12,8 @@ from tools import _get_db_conn
 
 def _clean_users():
     conn = _get_db_conn()
-    conn.execute('DELETE FROM users')
     conn.execute('DELETE FROM user_sessions')
+    conn.execute('DELETE FROM users')
     conn.execute('DELETE FROM departments')
     conn.commit()
     conn.close()
@@ -62,3 +62,100 @@ def test_password_hashing():
     conn.close()
     assert row[0].startswith('$2b$')
     assert 'mypassword' not in row[0]
+
+
+def test_login_success():
+    import auth
+    auth.register_user('loginuser', 'password123')
+    token = auth.login_user('loginuser', 'password123')
+    assert token is not None
+    assert len(token) > 0
+    # 验证 session 已存入数据库
+    conn = _get_db_conn()
+    row = conn.execute('SELECT user_id, expires_at FROM user_sessions WHERE token=?', (token,)).fetchone()
+    conn.close()
+    assert row is not None
+
+
+def test_login_wrong_password():
+    import auth
+    auth.register_user('loginuser2', 'password123')
+    with pytest.raises(ValueError, match='密码错误'):
+        auth.login_user('loginuser2', 'wrongpass')
+
+
+def test_login_inactive_user():
+    import auth
+    auth.register_user('inactiveuser', 'password123')
+    conn = _get_db_conn()
+    conn.execute('UPDATE users SET is_active=0 WHERE username=?', ('inactiveuser',))
+    conn.commit()
+    conn.close()
+    with pytest.raises(ValueError, match='禁用'):
+        auth.login_user('inactiveuser', 'password123')
+
+
+def test_login_nonexistent_user():
+    import auth
+    with pytest.raises(ValueError, match='用户不存在'):
+        auth.login_user('nobody', 'password123')
+
+
+def test_login_by_email():
+    import auth
+    auth.register_user('emailuser', 'password123', email='test@test.com')
+    token = auth.login_user('test@test.com', 'password123')
+    assert token is not None
+
+
+def test_get_user_by_token():
+    import auth
+    auth.register_user('tokenuser', 'password123')
+    token = auth.login_user('tokenuser', 'password123')
+    user = auth.get_user_by_token(token)
+    assert user is not None
+    assert user['username'] == 'tokenuser'
+    assert user['role'] == 'guest'
+
+
+def test_get_user_by_invalid_token():
+    import auth
+    user = auth.get_user_by_token('invalid-token-xyz')
+    assert user is None
+
+
+def test_get_user_by_expired_token():
+    import auth
+    auth.register_user('expireduser', 'password123')
+    # 手动创建过期 session
+    conn = _get_db_conn()
+    row = conn.execute('SELECT id FROM users WHERE username=?', ('expireduser',)).fetchone()
+    old_token = 'expired-token-001'
+    conn.execute(
+        'INSERT INTO user_sessions (token, user_id, created_at, expires_at) VALUES (?,?,?,?)',
+        (old_token, row[0], time.time() - 7200, time.time() - 3600)
+    )
+    conn.commit()
+    conn.close()
+    user = auth.get_user_by_token(old_token)
+    assert user is None
+
+
+def test_logout():
+    import auth
+    auth.register_user('logoutuser', 'password123')
+    token = auth.login_user('logoutuser', 'password123')
+    auth.logout_session(token)
+    user = auth.get_user_by_token(token)
+    assert user is None
+
+
+def test_login_remember_me():
+    import auth
+    auth.register_user('rememberuser', 'password123')
+    token = auth.login_user('rememberuser', 'password123', remember_me=True)
+    conn = _get_db_conn()
+    row = conn.execute('SELECT expires_at FROM user_sessions WHERE token=?', (token,)).fetchone()
+    conn.close()
+    # 7 天后 > 6 天后
+    assert row['expires_at'] - time.time() > 6 * 24 * 3600

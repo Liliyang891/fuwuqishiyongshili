@@ -81,3 +81,72 @@ def register_user(username, password, email=None):
         'department_id': None,
         'is_active': 1,
     }
+
+
+def login_user(login, password, remember_me=False):
+    """登录验证，返回 session token"""
+    conn = _get_db_conn()
+    user = conn.execute(
+        'SELECT id, username, email, password_hash, role, department_id, is_active FROM users WHERE username=? OR email=?',
+        (login, login)
+    ).fetchone()
+    if not user:
+        conn.close()
+        raise ValueError('用户不存在')
+    user = dict(user)
+    if not user['is_active']:
+        conn.close()
+        raise ValueError('账号已被禁用，请联系管理员')
+    if not _verify_password(password, user['password_hash']):
+        conn.close()
+        raise ValueError('密码错误')
+
+    token = str(uuid.uuid4())
+    now = time.time()
+    ttl = SESSION_TTL_REMEMBER if remember_me else SESSION_TTL
+    expires_at = now + ttl
+    conn.execute(
+        'INSERT OR REPLACE INTO user_sessions (token, user_id, created_at, expires_at) VALUES (?,?,?,?)',
+        (token, user['id'], now, expires_at)
+    )
+    conn.commit()
+    conn.close()
+    return token
+
+
+def logout_session(token):
+    """删除登录会话"""
+    conn = _get_db_conn()
+    conn.execute('DELETE FROM user_sessions WHERE token=?', (token,))
+    conn.commit()
+    conn.close()
+
+
+def get_user_by_token(token):
+    """通过 session token 获取当前用户，过期返回 None"""
+    conn = _get_db_conn()
+    now = time.time()
+    row = conn.execute(
+        '''SELECT u.id, u.username, u.email, u.role, u.department_id, u.is_active
+           FROM user_sessions s JOIN users u ON s.user_id = u.id
+           WHERE s.token=? AND s.expires_at > ?''',
+        (token, now)
+    ).fetchone()
+    conn.close()
+    if not row:
+        return None
+    user = dict(row)
+    user['role_name'] = ROLE_NAMES.get(user['role'], user['role'])
+    user['role_level'] = ROLE_LEVEL.get(user['role'], 0)
+    if user['department_id']:
+        user['department_name'] = _get_department_name(user['department_id'])
+    else:
+        user['department_name'] = None
+    return user
+
+
+def _get_department_name(dept_id):
+    conn = _get_db_conn()
+    row = conn.execute('SELECT name FROM departments WHERE id=?', (dept_id,)).fetchone()
+    conn.close()
+    return row['name'] if row else None
