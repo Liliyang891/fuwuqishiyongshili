@@ -7,16 +7,26 @@ Web 指令服务器 (HTTP) — AI Agent 版
 """
 
 import json
+import logging
 import os
 import socket
 import sys
 import time
-import urllib.request
 import urllib.error
+import urllib.request
 import uuid
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from socketserver import ThreadingMixIn
 from urllib.parse import parse_qs, urlparse
+
+# ---- 日志配置 ----
+LOG_LEVEL = os.environ.get('LOG_LEVEL', 'INFO')
+logging.basicConfig(
+    level=getattr(logging, LOG_LEVEL, logging.INFO),
+    format='%(asctime)s [%(levelname)s] %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S',
+)
+logger = logging.getLogger('ai-server')
 
 try:
     from dotenv import load_dotenv
@@ -26,6 +36,7 @@ except ImportError:
 
 # 导入工具模块
 import tools
+import auth as auth_module
 
 HOST = '0.0.0.0'
 PORT = int(os.environ.get('SERVER_PORT', 8888))
@@ -37,7 +48,6 @@ SPEECH_API_KEY = os.environ.get('SPEECH_API_KEY', '')
 UPLOAD_MAX_SIZE = int(os.environ.get('UPLOAD_MAX_SIZE', 50 * 1024 * 1024))  # 50MB
 
 PROVIDERS = []
-SESSIONS = {}
 SESSION_TTL = 3600
 
 # ---- System Prompt（引导 LLM 使用工具） ----
@@ -101,7 +111,7 @@ def load_config():
                     llm['name'] = llm.get('model', '默认模型')
                     return [llm]
         except Exception as e:
-            print(f"⚠️  加载 config.json 失败: {e}")
+            logger.warning('加载 config.json 失败: %s', e)
     return []
 
 
@@ -123,22 +133,20 @@ def get_model_list():
 
 
 def get_or_create_session(session_id):
-    """获取或创建会话"""
-    cleanup_sessions()
-    if session_id and session_id in SESSIONS:
-        SESSIONS[session_id]['last_active'] = time.time()
-        return session_id, SESSIONS[session_id]['messages']
+    """获取或创建会话（SQLite 持久化）"""
+    tools.cleanup_sessions_db(SESSION_TTL)
+    if session_id:
+        messages = tools.load_session(session_id, SESSION_TTL)
+        if messages:
+            return session_id, messages
     new_id = session_id or str(uuid.uuid4())
-    SESSIONS[new_id] = {'messages': [], 'last_active': time.time()}
-    return new_id, SESSIONS[new_id]['messages']
+    tools.save_session(new_id, [], SESSION_TTL)
+    return new_id, []
 
 
 def cleanup_sessions():
-    """清理过期会话"""
-    now = time.time()
-    expired = [sid for sid, s in SESSIONS.items() if now - s['last_active'] > SESSION_TTL]
-    for sid in expired:
-        del SESSIONS[sid]
+    """清理过期会话（委托给 tools 模块）"""
+    tools.cleanup_sessions_db(SESSION_TTL)
 
 
 def call_llm_api(messages, provider_name=None, tools_enabled=True):
@@ -182,7 +190,7 @@ def call_llm_api(messages, provider_name=None, tools_enabled=True):
     request_data = json.dumps(request_body).encode("utf-8")
 
     try:
-        print(f"    [i] 正在调用 {display_name} ({model})...")
+        logger.info('正在调用 %s (%s)...', display_name, model)
         req = urllib.request.Request(
             api_url,
             data=request_data,
@@ -193,7 +201,7 @@ def call_llm_api(messages, provider_name=None, tools_enabled=True):
             method="POST",
         )
         resp = urllib.request.urlopen(req, timeout=180)
-        print(f"    [i] API 响应状态: {resp.status}")
+        logger.info('API 响应状态: %s', resp.status)
         result = json.loads(resp.read().decode("utf-8"))
 
         choices = result.get("choices", [])
@@ -261,6 +269,17 @@ class RequestHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         parsed = urlparse(self.path)
 
+        if parsed.path == '/login':
+            self._serve_static_file('login.html')
+            return
+        if parsed.path == '/register':
+            self._serve_static_file('register.html')
+            return
+        if parsed.path == '/api/me':
+            user = self._require_auth()
+            if user:
+                self._send_json(200, {'success': True, 'user': user})
+            return
         if parsed.path == '/' or parsed.path == '/index.html':
             html = get_web_page()
             body = html.encode('utf-8')
@@ -296,9 +315,19 @@ class RequestHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         content_type = self.headers.get('Content-Type', '')
 
+        if parsed.path == '/api/register':
+            self._handle_register()
+            return
+        if parsed.path == '/api/login':
+            self._handle_login()
+            return
+        if parsed.path == '/api/logout':
+            self._handle_logout()
+            return
         if parsed.path == '/api/command':
             content_length = int(self.headers.get('Content-Length', 0))
-            body = self.rfile.read(content_length).decode('utf-8')
+            raw_body = self.rfile.read(content_length)
+            body = raw_body.decode('utf-8', errors='replace')
 
             try:
                 data = json.loads(body)
@@ -324,8 +353,9 @@ class RequestHandler(BaseHTTPRequestHandler):
             except json.JSONDecodeError:
                 session_id = ''
 
-            if session_id and session_id in SESSIONS:
-                SESSIONS[session_id]['messages'] = []
+            if session_id:
+                tools.delete_session(session_id)
+                tools.save_session(session_id, [], SESSION_TTL)
             self._send_json(200, {'success': True, 'message': '对话已清空'})
 
         elif parsed.path == '/api/upload':
@@ -348,7 +378,7 @@ class RequestHandler(BaseHTTPRequestHandler):
         """处理 /api/command 请求（支持 Function Calling 循环）"""
         print(f"\n[>] 收到来自 {client_ip} 的消息: {user_text}")
         if model_name:
-            print(f"[i] 指定模型: {model_name}")
+            logger.info('指定模型: %s', model_name)
 
         session_id, history = get_or_create_session(session_id)
 
@@ -365,7 +395,7 @@ class RequestHandler(BaseHTTPRequestHandler):
         messages.extend(history)
         messages.append({"role": "user", "content": user_text})
 
-        print(f"[i] 开始 Agent 对话 (历史 {len(history)} 条)...")
+        logger.info('开始 Agent 对话 (历史 %d 条)...', len(history))
 
         # Function Calling 循环
         tool_call_history = []  # 记录本轮所有工具调用
@@ -375,7 +405,7 @@ class RequestHandler(BaseHTTPRequestHandler):
             if not success:
                 # API 调用失败
                 error_msg = f"大模型调用失败: {content}"
-                print(f"[!] {error_msg}")
+                logger.error('%s', error_msg)
                 return {
                     'success': False,
                     'reply': error_msg,
@@ -385,9 +415,9 @@ class RequestHandler(BaseHTTPRequestHandler):
 
             # LLM 返回了 tool_calls
             if tool_calls:
-                print(f"[i] 第 {round_num + 1} 轮: LLM 请求调用 {len(tool_calls)} 个工具")
+                logger.info('第 %d 轮: LLM 请求调用 %d 个工具', round_num + 1, len(tool_calls))
                 for tc in tool_calls:
-                    print(f"    ↳ {tc['name']}({json.dumps(tc['arguments'], ensure_ascii=False)})")
+                    logger.debug('  ↳ %s(%s)', tc['name'], json.dumps(tc['arguments'], ensure_ascii=False))
 
                 # 将 LLM 的 assistant 消息加入（含 tool_calls）
                 assistant_msg = {
@@ -418,9 +448,9 @@ class RequestHandler(BaseHTTPRequestHandler):
                         "result": tool_result,
                     })
                     if tool_ok:
-                        print(f"    ✓ {tc['name']} 执行成功")
+                        logger.debug('  ✓ %s 执行成功', tc['name'])
                     else:
-                        print(f"    ✗ {tc['name']} 执行失败: {tool_result.get('error', '')}")
+                        logger.debug('  ✗ %s 执行失败: %s', tc['name'], tool_result.get('error', ''))
 
                     # 将 tool 结果加入消息
                     messages.append({
@@ -434,13 +464,14 @@ class RequestHandler(BaseHTTPRequestHandler):
 
             # LLM 返回了纯文本回复（没有 tool_calls）
             reply_text = content or "（大模型未返回内容）"
-            print(f"[<] 大模型最终回复: {reply_text[:80]}...")
+            logger.info('大模型最终回复: %s...', reply_text[:80])
 
             # 保存到历史
             history.append({"role": "user", "content": user_text})
             history.append({"role": "assistant", "content": reply_text})
             if len(history) > MAX_HISTORY * 2:
                 del history[:2]
+            tools.save_session(session_id, history, SESSION_TTL)
 
             result = {
                 'success': True,
@@ -454,7 +485,7 @@ class RequestHandler(BaseHTTPRequestHandler):
 
         # 超过最大轮次
         error_msg = f"操作超过最大轮次限制（{MAX_TOOL_ROUNDS}轮），已终止。"
-        print(f"[!] {error_msg}")
+        logger.error('%s', error_msg)
         return {
             'success': False,
             'reply': error_msg,
@@ -668,7 +699,7 @@ class RequestHandler(BaseHTTPRequestHandler):
             result = json.loads(resp.read().decode("utf-8"))
             return result.get("text", "")
         except Exception as e:
-            print(f"    [!] 语音识别失败: {e}")
+            logger.error('语音识别失败: %s', e)
             return None
 
     # ---- 文件下载 ----
@@ -736,6 +767,80 @@ class RequestHandler(BaseHTTPRequestHandler):
         except Exception as e:
             self._send_json(500, {'success': False, 'error': f'读取文件失败: {e}'})
 
+    # ---- 认证处理方法 ----
+
+    def _handle_register(self):
+        content_length = int(self.headers.get('Content-Length', 0))
+        body = self.rfile.read(content_length).decode('utf-8')
+        try:
+            data = json.loads(body)
+            username = data.get('username', '').strip()
+            password = data.get('password', '')
+            email = data.get('email', '').strip() or None
+        except json.JSONDecodeError:
+            self._send_json(400, {'success': False, 'error': '请求格式错误'})
+            return
+
+        try:
+            user = auth_module.register_user(username, password, email)
+            self._send_json(200, {'success': True, 'user': user, 'message': '注册成功'})
+        except ValueError as e:
+            self._send_json(400, {'success': False, 'error': str(e)})
+
+    def _handle_login(self):
+        content_length = int(self.headers.get('Content-Length', 0))
+        body = self.rfile.read(content_length).decode('utf-8')
+        try:
+            data = json.loads(body)
+            login = data.get('login', '').strip()
+            password = data.get('password', '')
+            remember_me = data.get('remember_me', False)
+        except json.JSONDecodeError:
+            self._send_json(400, {'success': False, 'error': '请求格式错误'})
+            return
+
+        try:
+            token = auth_module.login_user(login, password, remember_me)
+            user = auth_module.get_user_by_token(token)
+            ttl = 7 * 24 * 3600 if remember_me else 24 * 3600
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json; charset=utf-8')
+            self.send_header('Set-Cookie',
+                f'session_token={token}; Path=/; HttpOnly; Max-Age={ttl}; SameSite=Lax')
+            self._set_cors_headers()
+            body = json.dumps({'success': True, 'user': user}).encode('utf-8')
+            self.send_header('Content-Length', str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        except ValueError as e:
+            self._send_json(401, {'success': False, 'error': str(e)})
+
+    def _handle_logout(self):
+        cookie_header = self.headers.get('Cookie', '')
+        for part in cookie_header.split(';'):
+            part = part.strip()
+            if part.startswith('session_token='):
+                token = part[len('session_token='):]
+                auth_module.logout_session(token)
+                break
+        self._send_json(200, {'success': True, 'message': '已登出'})
+
+    def _serve_static_file(self, filename):
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        filepath = os.path.join(base_dir, 'static', filename)
+        try:
+            with open(filepath, 'r', encoding='utf-8') as f:
+                html = f.read()
+        except FileNotFoundError:
+            html = f'<html><body><h1>{filename} 未找到</h1></body></html>'
+        body = html.encode('utf-8')
+        self.send_response(200)
+        self.send_header('Content-Type', 'text/html; charset=utf-8')
+        self.send_header('Content-Length', str(len(body)))
+        self._set_cors_headers()
+        self.end_headers()
+        self.wfile.write(body)
+
     # ---- HTTP 辅助方法 ----
 
     def _send_json(self, code, data):
@@ -752,446 +857,55 @@ class RequestHandler(BaseHTTPRequestHandler):
         self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
         self.send_header('Access-Control-Allow-Headers', 'Content-Type, X-Subfolder')
 
+    def _get_user_from_cookie(self):
+        """从 Cookie 中获取当前登录用户，未登录返回 None"""
+        cookie_header = self.headers.get('Cookie', '')
+        session_token = None
+        for part in cookie_header.split(';'):
+            part = part.strip()
+            if part.startswith('session_token='):
+                session_token = part[len('session_token='):]
+                break
+        if not session_token:
+            return None
+        return auth_module.get_user_by_token(session_token)
+
+    def _require_auth(self):
+        """要求登录，未登录返回 302"""
+        user = self._get_user_from_cookie()
+        if user is None:
+            self.send_response(302)
+            self.send_header('Location', '/login')
+            self.end_headers()
+            return None
+        return user
+
+    def _require_role(self, min_role):
+        """要求最低角色，不够返回 403"""
+        user = self._require_auth()
+        if user is None:
+            return None
+        if auth_module.get_role_level(user['role']) < auth_module.get_role_level(min_role):
+            self._send_json(403, {'success': False, 'error': '权限不足'})
+            return None
+        return user
+
     def log_message(self, format, *args):
-        print(f"[HTTP] {self.client_address[0]} - {format % args}")
+        logger.info('HTTP %s - %s', self.client_address[0], format % args)
 
 
 # ========== Web 页面（含上传+语音按钮） ==========
 
 def get_web_page():
-    """返回 Web 客户端页面 HTML"""
-    return '''<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI 对话客户端</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
-            background: linear-gradient(135deg, #0c0c1d 0%, #1a1a3e 50%, #0d0d2b 100%);
-            min-height: 100vh; display: flex; justify-content: center; align-items: center; padding: 20px;
-        }
-        .container {
-            width: 100%; max-width: 700px;
-            background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);
-            border-radius: 20px; padding: 30px 40px;
-            backdrop-filter: blur(20px); box-shadow: 0 25px 50px rgba(0,0,0,0.4);
-        }
-        .header { text-align: center; margin-bottom: 25px; }
-        .header .icon { font-size: 48px; margin-bottom: 6px; }
-        .header h1 { color: #fff; font-size: 22px; font-weight: 600; letter-spacing: 1px; }
-        .header .subtitle { color: #8888aa; font-size: 12px; margin-top: 4px; }
-        .header .status { display: inline-flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 12px; color: #a0a0c0; }
-        .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #4ade80; animation: pulse 2s infinite; }
-        .status-dot.offline { background: #ef4444; animation: none; }
-        @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
-        .chat-area {
-            background: rgba(0,0,0,0.3); border-radius: 14px; padding: 18px;
-            margin-bottom: 16px; min-height: 180px; max-height: 380px; overflow-y: auto;
-            border: 1px solid rgba(255,255,255,0.06);
-        }
-        .message { margin-bottom: 14px; animation: fadeIn 0.3s ease; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        .message.user .label { color: #60a5fa; font-size: 11px; font-weight: 600; margin-bottom: 3px; text-transform: uppercase; letter-spacing: 1px; }
-        .message.server .label { color: #4ade80; font-size: 11px; font-weight: 600; margin-bottom: 3px; text-transform: uppercase; letter-spacing: 1px; }
-        .message .bubble {
-            padding: 12px 16px; border-radius: 12px; font-size: 14px; line-height: 1.6;
-            word-break: break-word; white-space: pre-wrap;
-        }
-        .message.user .bubble { background: linear-gradient(135deg, #3b82f6, #2563eb); color: #fff; border-top-left-radius: 4px; }
-        .message.server .bubble { background: rgba(255,255,255,0.08); color: #e0e0f0; border: 1px solid rgba(255,255,255,0.1); border-top-left-radius: 4px; }
-        .message .time { font-size: 10px; color: #6b6b8a; margin-top: 3px; }
-        .message.server .time { text-align: right; }
-        .message .extra { font-size: 10px; color: #fbbf24; margin-top: 2px; }
-        .toolbar { margin-bottom: 8px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-        .toolbar label { color: #a0a0c0; font-size: 12px; white-space: nowrap; }
-        .toolbar select {
-            padding: 7px 10px; border-radius: 8px;
-            border: 1px solid rgba(255,255,255,0.15); background: rgba(255,255,255,0.06);
-            color: #fff; font-size: 13px; outline: none; transition: all 0.3s ease;
-            cursor: pointer;
-        }
-        .toolbar select option { background: #1a1a3e; color: #fff; }
-        .toolbar select:focus { border-color: #3b82f6; }
-        .clear-btn {
-            margin-left: auto; padding: 6px 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.15);
-            background: rgba(239,68,68,0.15); color: #ef4444; font-size: 11px; cursor: pointer;
-            transition: all 0.3s ease;
-        }
-        .clear-btn:hover { background: rgba(239,68,68,0.3); }
-        .input-area { display: flex; gap: 8px; align-items: center; }
-        .input-area input {
-            flex: 1; padding: 12px 14px; border-radius: 12px;
-            border: 1px solid rgba(255,255,255,0.15); background: rgba(255,255,255,0.06);
-            color: #fff; font-size: 14px; outline: none; transition: all 0.3s ease; min-width: 0;
-        }
-        .input-area input::placeholder { color: #6b6b8a; }
-        .input-area input:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,0.15); }
-        .input-area .icon-btn {
-            width: 42px; height: 42px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.15);
-            background: rgba(255,255,255,0.06); color: #a0a0c0;
-            font-size: 18px; cursor: pointer; transition: all 0.3s ease;
-            display: flex; align-items: center; justify-content: center;
-            flex-shrink: 0;
-        }
-        .input-area .icon-btn:hover { background: rgba(255,255,255,0.12); color: #fff; }
-        .input-area .icon-btn.recording { background: rgba(239,68,68,0.3); border-color: #ef4444; color: #ef4444; animation: pulse 1.5s infinite; }
-        .input-area .send-btn {
-            padding: 12px 24px; border-radius: 12px; border: none;
-            background: linear-gradient(135deg, #3b82f6, #2563eb); color: #fff;
-            font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.3s ease; white-space: nowrap;
-            flex-shrink: 0;
-        }
-        .input-area .send-btn:hover { background: linear-gradient(135deg, #4b92ff, #3573f3); box-shadow: 0 8px 25px rgba(59,130,246,0.3); transform: translateY(-1px); }
-        .input-area .send-btn:active { transform: scale(0.97); }
-        .input-area .send-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
-        .footer { text-align: center; margin-top: 16px; font-size: 11px; color: #5a5a7a; }
-        .empty-hint { text-align: center; color: #5a5a7a; padding: 35px 0; font-size: 13px; }
-        .empty-hint .big-icon { font-size: 36px; display: block; margin-bottom: 8px; }
-        .upload-preview { display: none; margin: 6px 0; padding: 6px 10px; background: rgba(59,130,246,0.15); border-radius: 8px; color: #60a5fa; font-size: 12px; }
-        .upload-preview.show { display: block; }
-        .chat-area::-webkit-scrollbar { width: 5px; }
-        .chat-area::-webkit-scrollbar-track { background: transparent; }
-        .chat-area::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
-        #fileInput { display: none; }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="header">
-            <div class="icon">🤖</div>
-            <h1>AI 智能助手</h1>
-            <div class="subtitle">文件管理 · 数据库操作 · 智能对话</div>
-            <div class="status">
-                <span class="status-dot" id="statusDot"></span>
-                <span id="statusText">连接中...</span>
-            </div>
-        </div>
-        <div class="chat-area" id="chatArea">
-            <div class="empty-hint">
-                <span class="big-icon">💬</span>
-                输入消息或上传文件，AI 帮你管理文件和数据库
-            </div>
-        </div>
-        <div class="upload-preview" id="uploadPreview"></div>
-        <div class="toolbar">
-            <label>🤖 模型:</label>
-            <select id="modelSelect" onchange="selectModel(this.value)">
-                <option value="">加载中...</option>
-            </select>
-            <button class="clear-btn" onclick="clearChat()">🗑 清空对话</button>
-        </div>
-        <div class="input-area">
-            <input type="text" id="inputBox" placeholder="输入消息，如：帮我看看 data/files 里有哪些文件..." maxlength="2000" autofocus />
-            <input type="file" id="fileInput" multiple onchange="handleFileUpload(this.files)" accept="*/*" />
-            <button class="icon-btn" id="uploadBtn" onclick="document.getElementById('fileInput').click()" title="上传文件">📎</button>
-            <button class="icon-btn" id="voiceBtn" onclick="toggleVoice()" title="语音输入">🎤</button>
-            <button class="send-btn" id="sendBtn" onclick="sendMessage()">发 送</button>
-        </div>
-        <div class="footer">AI Agent 模式 · 支持文件/数据库/语音</div>
-    </div>
-    <script>
-        const chatArea = document.getElementById('chatArea');
-        const inputBox = document.getElementById('inputBox');
-        const sendBtn = document.getElementById('sendBtn');
-        const statusDot = document.getElementById('statusDot');
-        const statusText = document.getElementById('statusText');
-        const uploadPreview = document.getElementById('uploadPreview');
-        const voiceBtn = document.getElementById('voiceBtn');
-        const emptyHint = chatArea.querySelector('.empty-hint');
-        let messageCount = 0;
-        let selectedModel = '';
-        let sessionId = '';
-        let isRecording = false;
-        let recognition = null;
-        let pendingFiles = [];
+    """从 static/index.html 读取 Web 客户端页面"""
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    html_path = os.path.join(base_dir, 'static', 'index.html')
+    try:
+        with open(html_path, 'r', encoding='utf-8') as f:
+            return f.read()
+    except FileNotFoundError:
+        return '<html><body><h1>页面文件未找到</h1></body></html>'
 
-        // === 状态检查 ===
-        async function checkStatus() {
-            try {
-                const resp = await fetch('/api/status');
-                if (resp.ok) {
-                    const data = await resp.json();
-                    statusDot.classList.remove('offline');
-                    statusText.textContent = '服务器在线 (Agent)';
-                }
-            } catch (e) {
-                statusDot.classList.add('offline');
-                statusText.textContent = '服务器离线';
-            }
-        }
-
-        // === 消息添加 ===
-        function addMessage(type, text, extra) {
-            if (emptyHint && messageCount === 0) emptyHint.remove();
-            const now = new Date();
-            const timeStr = now.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-            const msgDiv = document.createElement('div');
-            msgDiv.className = 'message ' + type;
-            const labelText = type === 'user' ? '👤 你' : '🤖 AI';
-
-            let extraHtml = '';
-            if (extra && extra.tool_calls && extra.tool_calls.length > 0) {
-                extraHtml = '<div class="extra">🔧 执行了 ' + extra.tool_calls.length + ' 个工具操作</div>';
-            }
-
-            msgDiv.innerHTML = `
-                <div class="label">${labelText}</div>
-                <div class="bubble">${escapeHtml(text)}</div>
-                ${extraHtml}
-                <div class="time">${timeStr}</div>
-            `;
-            chatArea.appendChild(msgDiv);
-            chatArea.scrollTop = chatArea.scrollHeight;
-            messageCount++;
-        }
-
-        function escapeHtml(str) {
-            const div = document.createElement('div');
-            div.textContent = str;
-            return div.innerHTML.replace(/\\n/g, '<br>');
-        }
-
-        // === 发送消息 ===
-        async function sendMessage() {
-            const text = inputBox.value.trim();
-            if (!text && pendingFiles.length === 0) return;
-
-            let fullText = text;
-
-            // 如果有待上传的文件，先上传
-            if (pendingFiles.length > 0) {
-                addMessage('user', '📎 正在上传 ' + pendingFiles.length + ' 个文件...');
-                const uploadedPaths = [];
-                for (const file of pendingFiles) {
-                    try {
-                        const formData = new FormData();
-                        formData.append('file', file);
-                        const resp = await fetch('/api/upload', { method: 'POST', body: formData });
-                        const data = await resp.json();
-                        if (data.success) {
-                            uploadedPaths.push(data.path);
-                        } else {
-                            uploadedPaths.push('[上传失败: ' + (data.error || '未知错误') + ']');
-                        }
-                    } catch (e) {
-                        uploadedPaths.push('[上传失败: ' + e.message + ']');
-                    }
-                }
-
-                if (uploadedPaths.length > 0) {
-                    const fileInfo = '\\n\\n[已上传文件: ' + uploadedPaths.join(', ') + ']';
-                    fullText = (text || '请帮我看看上传的文件') + fileInfo;
-                }
-                pendingFiles = [];
-                uploadPreview.classList.remove('show');
-                uploadPreview.textContent = '';
-            }
-
-            if (!fullText) return;
-
-            addMessage('user', fullText);
-            inputBox.value = '';
-            sendBtn.disabled = true;
-            sendBtn.textContent = '处理中...';
-
-            try {
-                const resp = await fetch('/api/command', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ text: fullText, model: selectedModel, session_id: sessionId })
-                });
-                const data = await resp.json();
-                if (data.session_id) sessionId = data.session_id;
-                addMessage('server', data.reply, data);
-            } catch (err) {
-                addMessage('server', '错误：无法连接到服务器');
-                statusDot.classList.add('offline');
-                statusText.textContent = '服务器离线';
-            } finally {
-                sendBtn.disabled = false;
-                sendBtn.textContent = '发 送';
-                inputBox.focus();
-            }
-        }
-
-        // === 文件上传 ===
-        function handleFileUpload(files) {
-            if (!files || files.length === 0) return;
-            pendingFiles = Array.from(files);
-            const names = pendingFiles.map(f => f.name).join(', ');
-            uploadPreview.textContent = '📎 已选择: ' + names + '（共 ' + formatSize(files[0].size * pendingFiles.length) + '）';
-            uploadPreview.classList.add('show');
-
-            // 自动填入提示文本
-            if (!inputBox.value.trim()) {
-                inputBox.value = '请帮我处理上传的文件: ' + names;
-                inputBox.focus();
-            }
-        }
-
-        function formatSize(bytes) {
-            if (bytes < 1024) return bytes + ' B';
-            if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
-            return (bytes / 1048576).toFixed(1) + ' MB';
-        }
-
-        // === 语音输入（Web Speech API） ===
-        function toggleVoice() {
-            if (isRecording) {
-                stopRecording();
-                return;
-            }
-
-            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-            if (!SpeechRecognition) {
-                alert('你的浏览器不支持语音识别。请使用 Chrome 或 Edge 浏览器。');
-                return;
-            }
-
-            recognition = new SpeechRecognition();
-            recognition.lang = 'zh-CN';
-            recognition.interimResults = true;
-            recognition.continuous = false;
-
-            recognition.onstart = function() {
-                isRecording = true;
-                voiceBtn.classList.add('recording');
-                voiceBtn.textContent = '⏹';
-                inputBox.placeholder = '正在聆听...';
-            };
-
-            recognition.onresult = function(event) {
-                let transcript = '';
-                for (let i = event.resultIndex; i < event.results.length; i++) {
-                    transcript += event.results[i][0].transcript;
-                }
-                inputBox.value = transcript;
-            };
-
-            recognition.onerror = function(event) {
-                console.error('语音识别错误:', event.error);
-                stopRecording();
-                if (event.error === 'not-allowed') {
-                    alert('无法访问麦克风。请允许浏览器使用麦克风。');
-                }
-            };
-
-            recognition.onend = function() {
-                stopRecording();
-            };
-
-            try {
-                recognition.start();
-            } catch (e) {
-                alert('语音识别启动失败: ' + e.message);
-                stopRecording();
-            }
-        }
-
-        function stopRecording() {
-            isRecording = false;
-            voiceBtn.classList.remove('recording');
-            voiceBtn.textContent = '🎤';
-            inputBox.placeholder = '输入消息...';
-            if (recognition) {
-                try { recognition.stop(); } catch (e) {}
-                recognition = null;
-            }
-        }
-
-        // === 清空对话 ===
-        async function clearChat() {
-            try {
-                await fetch('/api/clear', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ session_id: sessionId })
-                });
-            } catch (e) {}
-            chatArea.innerHTML = '<div class="empty-hint"><span class="big-icon">💬</span>对话已清空，输入消息开始新对话</div>';
-            messageCount = 0;
-        }
-
-        // === 键盘快捷键 ===
-        inputBox.addEventListener('keydown', function(e) {
-            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
-        });
-
-        // === 模型加载 ===
-        async function loadModels() {
-            const sel = document.getElementById('modelSelect');
-            try {
-                const resp = await fetch('/api/models');
-                if (resp.ok) {
-                    const data = await resp.json();
-                    if (data.models && data.models.length > 0) {
-                        const currentVal = sel.value;
-                        sel.innerHTML = '';
-                        data.models.forEach(function(m, i) {
-                            const opt = document.createElement('option');
-                            opt.value = m;
-                            opt.text = m;
-                            if (i === 0 && !currentVal) {
-                                opt.selected = true;
-                                selectedModel = m;
-                            } else if (currentVal && m === currentVal) {
-                                opt.selected = true;
-                                selectedModel = m;
-                            }
-                            sel.appendChild(opt);
-                        });
-                    } else {
-                        sel.innerHTML = '<option value="">无可用模型</option>';
-                    }
-                }
-            } catch (e) {
-                sel.innerHTML = '<option value="">加载失败</option>';
-            }
-        }
-
-        function selectModel(val) { selectedModel = val; }
-
-        // === 粘贴图片 ===
-        document.addEventListener('paste', function(e) {
-            const items = e.clipboardData.items;
-            for (const item of items) {
-                if (item.type.startsWith('image/')) {
-                    const blob = item.getAsFile();
-                    if (blob) {
-                        pendingFiles = [blob];
-                        uploadPreview.textContent = '📎 已粘贴图片: ' + blob.type + ' (' + formatSize(blob.size) + ')';
-                        uploadPreview.classList.add('show');
-                        if (!inputBox.value.trim()) {
-                            inputBox.value = '请帮我看看这张图片';
-                            inputBox.focus();
-                        }
-                    }
-                }
-            }
-        });
-
-        // === 拖拽上传 ===
-        const container = document.querySelector('.container');
-        container.addEventListener('dragover', function(e) { e.preventDefault(); });
-        container.addEventListener('drop', function(e) {
-            e.preventDefault();
-            const files = e.dataTransfer.files;
-            if (files.length > 0) {
-                handleFileUpload(files);
-            }
-        });
-
-        // === 初始化 ===
-        loadModels();
-        checkStatus();
-        setInterval(checkStatus, 10000);
-        inputBox.focus();
-    </script>
-</body>
-</html>'''
 
 
 def main():
@@ -1203,30 +917,30 @@ def main():
         try:
             port = int(arg)
         except ValueError:
-            print(f"警告：忽略无效参数 '{arg}'")
+            logger.warning("忽略无效参数 '%s'", arg)
 
     PROVIDERS = load_config()
     server_ip = get_server_ip()
 
-    print("=" * 55)
-    print(f"  🌐 AI Agent 服务器已启动")
-    print(f"  服务器IP地址: {server_ip}")
-    print(f"  监听端口: {port}")
-    print(f"  CORS: {CORS_ORIGIN}")
-    print(f"  工具数量: {len(tools.TOOL_MAP)} 个")
-    print(f"  数据目录: {tools.FILES_DIR}")
-    print(f"  数据库: {tools.DB_PATH}")
-    print(f"  最大工具调用轮次: {MAX_TOOL_ROUNDS}")
+    logger.info('=' * 55)
+    logger.info('AI Agent 服务器已启动')
+    logger.info('服务器IP地址: %s', server_ip)
+    logger.info('监听端口: %s', port)
+    logger.info('CORS: %s', CORS_ORIGIN)
+    logger.info('工具数量: %d 个', len(tools.TOOL_MAP))
+    logger.info('数据目录: %s', tools.FILES_DIR)
+    logger.info('数据库: %s', tools.DB_PATH)
+    logger.info('最大工具调用轮次: %d', MAX_TOOL_ROUNDS)
     if PROVIDERS:
-        print(f"  🤖 已配置 {len(PROVIDERS)} 个模型:")
+        logger.info('已配置 %d 个模型:', len(PROVIDERS))
         for p in PROVIDERS:
-            print(f"     - {p.get('name', 'N/A')} ({p.get('model', 'N/A')})")
+            logger.info('     - %s (%s)', p.get('name', 'N/A'), p.get('model', 'N/A'))
     else:
-        print(f"  ⚠️  未配置大模型，请在 .env 中设置 PROVIDER1_* 环境变量")
+        logger.warning('未配置大模型，请在 .env 中设置 PROVIDER1_* 环境变量')
     print()
-    print(f"  📱 浏览器访问: http://{server_ip}:{port}")
-    print(f"  📱 本地访问: http://127.0.0.1:{port}")
-    print("=" * 55)
+    logger.info('浏览器访问: http://%s:%s', server_ip, port)
+    logger.info('本地访问: http://127.0.0.1:%s', port)
+    logger.info('=' * 55)
     print()
 
     server = ThreadedHTTPServer((HOST, port), RequestHandler)
@@ -1235,7 +949,7 @@ def main():
     except KeyboardInterrupt:
         print("\n\n服务器正在关闭...")
         server.shutdown()
-        print("服务器已关闭。")
+        logger.info('服务器已关闭。')
 
 
 if __name__ == '__main__':
