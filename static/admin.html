@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>管理后台 - HDXT AI 助手</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:#141425; color:#d0d0e0; font-family:"Microsoft YaHei",sans-serif; display:flex; min-height:100vh; }
+.sidebar { width:180px; background:#1a1a30; padding:16px 0; display:flex; flex-direction:column; }
+.sidebar h3 { color:#fbbf24; font-size:14px; padding:0 16px; margin-bottom:16px; }
+.sidebar a { color:#a0a0c0; text-decoration:none; padding:10px 16px; font-size:13px; cursor:pointer; transition:all 0.2s; display:block; }
+.sidebar a:hover, .sidebar a.active { background:#3b82f6; color:#fff; }
+.sidebar .back-link { margin-top:auto; color:#ef4444; }
+.main { flex:1; padding:24px; overflow-y:auto; }
+.panel { display:none; }
+.panel.active { display:block; }
+h2 { color:#60a5fa; margin-bottom:16px; font-size:18px; }
+.toolbar { display:flex; gap:12px; margin-bottom:16px; align-items:center; }
+.toolbar select, .toolbar input { background:#2a2a3e; border:1px solid #3a3a5e; color:#fff; padding:6px 10px; border-radius:4px; font-size:13px; }
+table { width:100%; border-collapse:collapse; font-size:13px; }
+th { background:#1a1a3e; padding:8px 10px; text-align:left; border-bottom:2px solid #3b82f6; }
+td { padding:7px 10px; border-bottom:1px solid #2a2a4e; }
+.btn { padding:5px 12px; border:none; border-radius:4px; cursor:pointer; font-size:12px; }
+.btn-primary { background:#3b82f6; color:#fff; }
+.btn-danger { background:#ef4444; color:#fff; }
+.btn-success { background:#4ade80; color:#000; }
+.btn-sm { padding:3px 8px; font-size:11px; }
+.modal-overlay { display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.6); z-index:100; align-items:center; justify-content:center; }
+.modal-overlay.show { display:flex; }
+.modal { background:#1e1e2e; border-radius:12px; padding:24px; min-width:320px; }
+.modal h3 { color:#60a5fa; margin-bottom:16px; }
+.modal .form-group { margin-bottom:12px; }
+.modal label { font-size:13px; color:#a0a0c0; display:block; margin-bottom:4px; }
+.modal select, .modal input { width:100%; background:#2a2a3e; border:1px solid #3a3a5e; color:#fff; padding:8px; border-radius:4px; }
+.modal .actions { display:flex; gap:8px; margin-top:16px; justify-content:flex-end; }
+.role-super_admin { color:#fbbf24; }
+.role-chairman { color:#60a5fa; }
+.role-gm { color:#818cf8; }
+.role-dept_head { color:#34d399; }
+.role-staff { color:#a78bfa; }
+.role-guest { color:#6b7280; }
+</style>
+</head>
+<body>
+<div class="sidebar">
+    <h3>管理后台</h3>
+    <a class="active" onclick="showPanel('users')">用户管理</a>
+    <a onclick="showPanel('departments')">部门管理</a>
+    <a onclick="showPanel('audit')">审计日志</a>
+    <a class="back-link" href="/chat/">← 返回助手</a>
+</div>
+<div class="main">
+    <div class="panel active" id="panel-users">
+        <h2>用户管理</h2>
+        <div class="toolbar">
+            <select id="filterRole" onchange="loadUsers()">
+                <option value="">全部角色</option>
+                <option value="super_admin">超级管理员</option><option value="chairman">董事长</option>
+                <option value="gm">总经理</option><option value="dept_head">部门长</option>
+                <option value="staff">部门职员</option><option value="guest">游客</option>
+            </select>
+            <select id="filterActive" onchange="loadUsers()">
+                <option value="">全部状态</option><option value="true">正常</option><option value="false">已禁用</option>
+            </select>
+        </div>
+        <table><thead><tr><th>ID</th><th>用户名</th><th>邮箱</th><th>角色</th><th>部门</th><th>状态</th><th>注册时间</th><th>操作</th></tr></thead>
+        <tbody id="userTableBody"></tbody></table>
+    </div>
+    <div class="panel" id="panel-departments">
+        <h2>部门管理</h2>
+        <div class="toolbar">
+            <input type="text" id="newDeptName" placeholder="新部门名称">
+            <button class="btn btn-primary" onclick="createDept()">新增部门</button>
+        </div>
+        <table><thead><tr><th>ID</th><th>部门名称</th><th>人数</th><th>创建时间</th><th>操作</th></tr></thead>
+        <tbody id="deptTableBody"></tbody></table>
+    </div>
+    <div class="panel" id="panel-audit">
+        <h2>审计日志</h2>
+        <table><thead><tr><th>ID</th><th>操作者</th><th>操作类型</th><th>详情</th><th>时间</th></tr></thead>
+        <tbody id="auditTableBody"></tbody></table>
+    </div>
+</div>
+<div class="modal-overlay" id="editModal">
+    <div class="modal">
+        <h3>编辑用户</h3>
+        <input type="hidden" id="editUserId">
+        <div class="form-group"><label>角色</label><select id="editRole">
+            <option value="super_admin">超级管理员</option><option value="chairman">董事长</option>
+            <option value="gm">总经理</option><option value="dept_head">部门长</option>
+            <option value="staff">部门职员</option><option value="guest">游客</option>
+        </select></div>
+        <div class="form-group"><label>部门</label><select id="editDept"><option value="">无部门</option></select></div>
+        <div class="actions">
+            <button class="btn btn-danger btn-sm" onclick="toggleUser()" id="btnToggle">禁用</button>
+            <button class="btn btn-primary" onclick="saveUser()">保存</button>
+            <button class="btn" onclick="closeModal()">取消</button>
+        </div>
+    </div>
+</div>
+<script>
+let currentPanel = 'users';
+
+function showPanel(name) {
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.sidebar a').forEach(a => a.classList.remove('active'));
+    document.getElementById('panel-' + name).classList.add('active');
+    event.target.classList.add('active');
+    currentPanel = name;
+    if (name === 'users') loadUsers();
+    else if (name === 'departments') loadDepts();
+    else if (name === 'audit') loadAudit();
+}
+
+async function api(url, method='GET', body=null) {
+    const opts = { method, headers: { 'Content-Type': 'application/json' } };
+    if (body) opts.body = JSON.stringify(body);
+    const resp = await fetch(url, opts);
+    return resp.json();
+}
+
+async function loadUsers() {
+    const role = document.getElementById('filterRole').value;
+    const active = document.getElementById('filterActive').value;
+    let url = '/api/admin/users?';
+    if (role) url += 'role=' + role + '&';
+    if (active) url += 'active=' + active;
+    const data = await api(url);
+    document.getElementById('userTableBody').innerHTML = data.users.map(u =>
+        `<tr>
+            <td>${u.id}</td><td>${u.username}</td><td>${u.email || '-'}</td>
+            <td class="role-${u.role}">${u.role_name}</td><td>${u.department_name || '-'}</td>
+            <td style="color:${u.is_active?'#4ade80':'#ef4444'}">${u.is_active?'正常':'已禁用'}</td>
+            <td>${new Date(u.created_at*1000).toLocaleDateString()}</td>
+            <td>
+                <button class="btn btn-primary btn-sm" onclick="editUser(${u.id},'${u.role}',${u.department_id||'null'},${u.is_active})">编辑</button>
+                <button class="btn btn-sm" style="background:#fbbf24;color:#000" onclick="resetPwd(${u.id})">重置密码</button>
+                <button class="btn btn-danger btn-sm" onclick="deleteUser(${u.id})">删除</button>
+            </td>
+        </tr>`).join('');
+}
+
+function editUser(id, role, deptId, isActive) {
+    document.getElementById('editUserId').value = id;
+    document.getElementById('editRole').value = role;
+    document.getElementById('btnToggle').textContent = isActive ? '禁用' : '启用';
+    document.getElementById('editModal').classList.add('show');
+    document.getElementById('editDept').innerHTML = '<option value="">无部门</option>';
+    api('/api/admin/departments').then(d => {
+        d.departments.forEach(dept => {
+            const opt = document.createElement('option');
+            opt.value = dept.id;
+            opt.textContent = dept.name;
+            if (dept.id === deptId) opt.selected = true;
+            document.getElementById('editDept').appendChild(opt);
+        });
+    });
+}
+
+function closeModal() { document.getElementById('editModal').classList.remove('show'); }
+
+async function saveUser() {
+    const id = document.getElementById('editUserId').value;
+    const role = document.getElementById('editRole').value;
+    const deptId = document.getElementById('editDept').value || null;
+    await api('/api/admin/users/' + id + '/role', 'POST', {
+        role, department_id: deptId ? parseInt(deptId) : null
+    });
+    closeModal(); loadUsers();
+}
+
+async function toggleUser() {
+    const id = document.getElementById('editUserId').value;
+    const isActive = document.getElementById('btnToggle').textContent === '禁用';
+    await api('/api/admin/users/' + id + '/role', 'POST', { role: document.getElementById('editRole').value, is_active: !isActive });
+    closeModal(); loadUsers();
+}
+
+async function resetPwd(id) {
+    const newPw = prompt('输入新密码（至少6位）：');
+    if (!newPw || newPw.length < 6) { alert('密码至少6位'); return; }
+    await api('/api/admin/users/reset-password', 'POST', { user_id: id, new_password: newPw });
+    alert('密码已重置为：' + newPw);
+}
+
+async function deleteUser(id) {
+    if (!confirm('确定要删除此用户吗？此操作不可恢复。')) return;
+    await api('/api/admin/users/' + id + '/delete', 'POST');
+    loadUsers();
+}
+
+async function loadDepts() {
+    const data = await api('/api/admin/departments');
+    document.getElementById('deptTableBody').innerHTML = data.departments.map(d =>
+        `<tr>
+            <td>${d.id}</td><td id="deptName-${d.id}">${d.name}</td><td>${d.user_count}</td>
+            <td>${new Date(d.created_at*1000).toLocaleDateString()}</td>
+            <td>
+                <button class="btn btn-primary btn-sm" onclick="editDeptName(${d.id},'${d.name}')">改名</button>
+                <button class="btn btn-danger btn-sm" onclick="deleteDept(${d.id})">删除</button>
+            </td>
+        </tr>`).join('');
+}
+
+async function createDept() {
+    const name = document.getElementById('newDeptName').value.trim();
+    if (!name) return alert('请输入部门名称');
+    await api('/api/admin/departments', 'POST', { name });
+    document.getElementById('newDeptName').value = '';
+    loadDepts();
+}
+
+async function editDeptName(id, oldName) {
+    const name = prompt('修改部门名称：', oldName);
+    if (!name || name === oldName) return;
+    await api('/api/admin/departments/' + id + '/update', 'POST', { name });
+    loadDepts();
+}
+
+async function deleteDept(id) {
+    if (!confirm('确定删除此部门？')) return;
+    try {
+        await api('/api/admin/departments/' + id + '/delete', 'POST');
+        loadDepts();
+    } catch(e) { alert('删除失败'); }
+}
+
+async function loadAudit() {
+    const data = await api('/api/admin/audit-logs');
+    document.getElementById('auditTableBody').innerHTML = data.logs.map(l =>
+        `<tr>
+            <td>${l.id}</td><td>${l.username || l.user_id}</td><td>${l.action}</td>
+            <td>${l.detail}</td><td>${new Date(l.created_at*1000).toLocaleString()}</td>
+        </tr>`).join('');
+}
+
+loadUsers();
+</script>
+</body>
+</html>
