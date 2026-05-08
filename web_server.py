@@ -276,6 +276,11 @@ class RequestHandler(BaseHTTPRequestHandler):
         if parsed.path == '/register':
             self._serve_static_file('register.html')
             return
+        if parsed.path == '/admin/' or parsed.path == '/admin':
+            user = self._require_role('super_admin')
+            if user is None: return
+            self._serve_static_file('admin.html')
+            return
         if parsed.path == '/api/me':
             user = self._require_auth()
             if user:
@@ -555,7 +560,7 @@ class RequestHandler(BaseHTTPRequestHandler):
                             "content": json.dumps({"error": err_msg}, ensure_ascii=False),
                         })
                         continue
-                    tool_ok, tool_result = tools.execute_tool(tc['name'], tc['arguments'])
+                    tool_ok, tool_result = tools.execute_tool(tc['name'], tc['arguments'], user=user)
                     tool_call_history.append({
                         "tool": tc['name'],
                         "arguments": tc['arguments'],
