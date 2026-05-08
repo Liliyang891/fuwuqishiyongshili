@@ -149,13 +149,14 @@ def cleanup_sessions():
     tools.cleanup_sessions_db(SESSION_TTL)
 
 
-def call_llm_api(messages, provider_name=None, tools_enabled=True):
+def call_llm_api(messages, provider_name=None, tools_enabled=True, allowed_tools=None):
     """
     调用大模型 API
     参数:
         messages: 消息列表（含 system prompt）
         provider_name: 指定模型
         tools_enabled: 是否启用 function calling
+        allowed_tools: 允许的工具列表（权限过滤后），为 None 则使用默认全部工具
     返回: (success: bool, reply_text: str, tool_calls: list or None)
     """
     provider = get_provider(provider_name)
@@ -184,7 +185,7 @@ def call_llm_api(messages, provider_name=None, tools_enabled=True):
     }
 
     if tools_enabled:
-        request_body["tools"] = tools.get_tools_definition()
+        request_body["tools"] = allowed_tools if allowed_tools is not None else tools.get_tools_definition()
         request_body["tool_choice"] = "auto"
 
     request_data = json.dumps(request_body).encode("utf-8")
@@ -280,7 +281,13 @@ class RequestHandler(BaseHTTPRequestHandler):
             if user:
                 self._send_json(200, {'success': True, 'user': user})
             return
-        if parsed.path == '/' or parsed.path == '/index.html':
+        if parsed.path == '/' or parsed.path == '/index.html' or parsed.path == '/chat/':
+            user = self._get_user_from_cookie()
+            if user is None:
+                self.send_response(302)
+                self.send_header('Location', '/login')
+                self.end_headers()
+                return
             html = get_web_page()
             body = html.encode('utf-8')
             self.send_response(200)
@@ -376,6 +383,14 @@ class RequestHandler(BaseHTTPRequestHandler):
 
     def _handle_command(self, user_text, client_ip, model_name=None, session_id=None):
         """处理 /api/command 请求（支持 Function Calling 循环）"""
+        user = self._get_user_from_cookie()
+        if user is None:
+            return {
+                'success': False,
+                'reply': '请先登录',
+                'session_id': '',
+                'server_ip': get_server_ip(),
+            }
         print(f"\n[>] 收到来自 {client_ip} 的消息: {user_text}")
         if model_name:
             logger.info('指定模型: %s', model_name)
@@ -397,10 +412,12 @@ class RequestHandler(BaseHTTPRequestHandler):
 
         logger.info('开始 Agent 对话 (历史 %d 条)...', len(history))
 
+        # 根据用户角色获取允许的工具
+        allowed_tools = auth_module.get_allowed_tools(user)
         # Function Calling 循环
         tool_call_history = []  # 记录本轮所有工具调用
         for round_num in range(MAX_TOOL_ROUNDS + 1):
-            success, content, tool_calls = call_llm_api(messages, model_name)
+            success, content, tool_calls = call_llm_api(messages, model_name, allowed_tools=allowed_tools)
 
             if not success:
                 # API 调用失败
@@ -440,6 +457,22 @@ class RequestHandler(BaseHTTPRequestHandler):
 
                 # 执行每个工具调用
                 for tc in tool_calls:
+                    # 权限检查
+                    file_path = tc['arguments'].get('path', '') if 'arguments' in tc else ''
+                    can_exec, err_msg = auth_module.can_execute_tool(tc['name'], user, file_path)
+                    if not can_exec:
+                        tool_call_history.append({
+                            "tool": tc['name'],
+                            "arguments": tc['arguments'],
+                            "success": False,
+                            "result": {"error": err_msg},
+                        })
+                        messages.append({
+                            "role": "tool",
+                            "tool_call_id": tc['id'],
+                            "content": json.dumps({"error": err_msg}, ensure_ascii=False),
+                        })
+                        continue
                     tool_ok, tool_result = tools.execute_tool(tc['name'], tc['arguments'])
                     tool_call_history.append({
                         "tool": tc['name'],
@@ -497,6 +530,13 @@ class RequestHandler(BaseHTTPRequestHandler):
 
     def _handle_upload(self, content_type):
         """处理文件上传（multipart/form-data）"""
+        user = self._get_user_from_cookie()
+        if user is None:
+            self._send_json(401, {'success': False, 'error': '请先登录'})
+            return
+        if auth_module.get_role_level(user['role']) < auth_module.get_role_level('staff'):
+            self._send_json(403, {'success': False, 'error': '权限不足：职员及以上可上传'})
+            return
         content_length = int(self.headers.get('Content-Length', 0))
         if content_length > UPLOAD_MAX_SIZE:
             self._send_json(413, {'success': False, 'error': f'文件太大，最大允许 {UPLOAD_MAX_SIZE // (1024*1024)}MB'})
