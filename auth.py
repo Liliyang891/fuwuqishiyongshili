@@ -35,6 +35,54 @@ USERNAME_PATTERN = re.compile(r'^[a-zA-Z0-9_]{3,20}$')
 SESSION_TTL = 24 * 3600
 SESSION_TTL_REMEMBER = 7 * 24 * 3600
 
+# 工具权限映射：工具名 -> (最小角色等级, 可执行的操作类型)
+TOOL_PERMISSIONS = {
+    # 文件读取
+    'read_file': ('guest', 'read'),
+    'get_file_info': ('guest', 'read'),
+    'search_files': ('guest', 'read'),
+    'search_content': ('guest', 'read'),
+    'get_file_hash': ('guest', 'read'),
+    'batch_read': ('guest', 'read'),
+    'list_folder': ('guest', 'read'),
+    'count_items': ('guest', 'read'),
+    # 文件写入
+    'write_file': ('staff', 'write'),
+    'append_file': ('staff', 'write'),
+    'insert_text': ('staff', 'write'),
+    'replace_text': ('staff', 'write'),
+    'delete_lines': ('staff', 'write'),
+    'create_folder': ('staff', 'write'),
+    # 文件管理
+    'move_file': ('staff', 'write'),
+    'copy_file': ('staff', 'write'),
+    'move_folder': ('staff', 'write'),
+    'copy_folder': ('staff', 'write'),
+    # 文件删除（仅超管）
+    'delete_file': ('super_admin', 'delete'),
+    'delete_folder': ('super_admin', 'delete'),
+    # 上传
+    'save_uploaded_file': ('staff', 'write'),
+    # 压缩
+    'zip_files': ('staff', 'write'),
+    'unzip_file': ('staff', 'write'),
+    # DB 读取
+    'db_list_tables': ('staff', 'read_db'),
+    'db_describe_table': ('staff', 'read_db'),
+    'db_query': ('staff', 'read_db'),
+    'db_create_table': ('gm', 'write_db'),
+    # DB 写入
+    'db_execute': ('dept_head', 'write_db'),
+    # DB 删除
+    'db_drop_table': ('super_admin', 'delete_db'),
+}
+
+DANGEROUS_ACTIONS = {
+    'delete_file': 'file_delete',
+    'delete_folder': 'file_delete',
+    'db_drop_table': 'db_drop',
+}
+
 
 def _hash_password(password):
     return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt(rounds=12)).decode('utf-8')
@@ -42,6 +90,79 @@ def _hash_password(password):
 
 def _verify_password(password, password_hash):
     return bcrypt.checkpw(password.encode('utf-8'), password_hash.encode('utf-8'))
+
+
+def get_role_level(role_name):
+    return ROLE_LEVEL.get(role_name, 0)
+
+
+def get_allowed_tools(user):
+    """根据用户角色返回允许的工具定义列表"""
+    from tools import get_tools_definition
+    all_tools = get_tools_definition()
+    role = user.get('role', 'guest')
+    user_level = ROLE_LEVEL.get(role, 0)
+
+    allowed = []
+    for tool in all_tools:
+        tool_name = tool['function']['name']
+        perm = TOOL_PERMISSIONS.get(tool_name)
+        if perm is None:
+            allowed.append(tool)
+        else:
+            min_role, _ = perm
+            min_level = ROLE_LEVEL.get(min_role, 0)
+            if user_level >= min_level:
+                allowed.append(tool)
+    return allowed
+
+
+def get_file_scope(user):
+    """返回用户文件操作范围"""
+    role = user.get('role', 'guest')
+    dept_id = user.get('department_id')
+    if role in ('super_admin', 'chairman', 'gm'):
+        return 'all'
+    if role in ('dept_head', 'staff'):
+        if dept_id:
+            dept_name = _get_department_name(dept_id)
+            return os.path.join(FILES_DIR, dept_name) if dept_name else 'public'
+        return 'department'
+    return 'public'
+
+
+def can_execute_tool(tool_name, user, file_path=None):
+    """检查用户是否可以执行指定工具
+    返回: (allowed: bool, message: str)
+    """
+    role = user.get('role', 'guest')
+    user_level = ROLE_LEVEL.get(role, 0)
+
+    perm = TOOL_PERMISSIONS.get(tool_name)
+    if perm is None:
+        return True, ''
+
+    min_role, action_type = perm
+    min_level = ROLE_LEVEL.get(min_role, 0)
+    if user_level < min_level:
+        role_name = ROLE_NAMES.get(role, role)
+        return False, f"权限不足：{role_name}不能执行{tool_name}操作"
+
+    if tool_name in DANGEROUS_ACTIONS:
+        _log_audit(user.get('id'), DANGEROUS_ACTIONS[tool_name],
+                   json.dumps({'tool': tool_name, 'path': file_path}, ensure_ascii=False))
+
+    return True, ''
+
+
+def _log_audit(user_id, action, detail):
+    conn = _get_db_conn()
+    conn.execute(
+        'INSERT INTO audit_log (user_id, action, detail, created_at) VALUES (?,?,?,?)',
+        (user_id, action, detail, time.time())
+    )
+    conn.commit()
+    conn.close()
 
 
 def register_user(username, password, email=None):

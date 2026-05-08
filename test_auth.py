@@ -159,3 +159,38 @@ def test_login_remember_me():
     conn.close()
     # 7 天后 > 6 天后
     assert row['expires_at'] - time.time() > 6 * 24 * 3600
+
+
+def test_role_level():
+    import auth
+    assert auth.get_role_level('super_admin') == 6
+    assert auth.get_role_level('guest') == 1
+
+
+def test_get_allowed_tools_super_admin():
+    import auth
+    user = {'role': 'super_admin', 'department_id': None}
+    tools = auth.get_allowed_tools(user)
+    tool_names = [t['function']['name'] for t in tools]
+    assert 'delete_file' in tool_names
+    assert 'db_drop_table' in tool_names
+    assert 'write_file' in tool_names
+
+
+def test_get_allowed_tools_guest():
+    import auth
+    user = {'role': 'guest', 'department_id': None}
+    tools = auth.get_allowed_tools(user)
+    tool_names = [t['function']['name'] for t in tools]
+    assert 'delete_file' not in tool_names
+    assert 'db_drop_table' not in tool_names
+    assert 'db_execute' not in tool_names
+    assert 'write_file' not in tool_names
+    assert 'read_file' in tool_names
+
+
+def test_can_execute_tool():
+    import auth
+    user = {'role': 'super_admin', 'department_id': None}
+    ok, msg = auth.can_execute_tool('delete_file', user, 'some/file.txt')
+    assert ok is True
