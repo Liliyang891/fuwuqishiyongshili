@@ -1621,13 +1621,23 @@ TOOL_MAP = {
 }
 
 
-def execute_tool(tool_name, arguments):
+def execute_tool(tool_name, arguments, user=None):
     """
-    执行工具调用
+    执行工具调用，user 参数用于权限检查
     返回: (success, result_dict)
     """
     if tool_name not in TOOL_MAP:
         return False, {"error": f"未知工具: {tool_name}"}
+
+    if user is not None:
+        try:
+            import auth
+            file_path = arguments.get('path', '') if isinstance(arguments, dict) else ''
+            can_exec, err_msg = auth.can_execute_tool(tool_name, user, file_path)
+            if not can_exec:
+                return False, {"error": err_msg}
+        except ImportError:
+            pass
 
     func = TOOL_MAP[tool_name]
     try:
