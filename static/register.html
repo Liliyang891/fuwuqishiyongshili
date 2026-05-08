@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>注册 - HDXT AI 助手</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #141425; color: #d0d0e0; font-family: "Microsoft YaHei", sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+.reg-card { background: #1e1e2e; border-radius: 12px; padding: 36px; width: 380px; max-width: 90vw; box-shadow: 0 4px 24px rgba(0,0,0,0.4); }
+.reg-card h2 { text-align: center; color: #60a5fa; margin-bottom: 4px; }
+.reg-card .subtitle { text-align: center; color: #8888aa; font-size: 13px; margin-bottom: 24px; }
+.form-group { margin-bottom: 14px; }
+.form-group label { display: block; font-size: 13px; color: #a0a0c0; margin-bottom: 5px; }
+.form-group label .optional { color: #5a5a7a; }
+.form-group input { width: 100%; padding: 9px 12px; background: #2a2a3e; border: 1px solid #3a3a5e; border-radius: 6px; color: #fff; font-size: 14px; outline: none; }
+.form-group input:focus { border-color: #3b82f6; }
+.form-group input.error { border-color: #ef4444; }
+.btn-register { width: 100%; padding: 12px; background: #3b82f6; color: #fff; border: none; border-radius: 6px; font-size: 15px; font-weight: bold; cursor: pointer; }
+.btn-register:hover { background: #2563eb; }
+.btn-register:disabled { opacity: 0.6; cursor: not-allowed; }
+.error-msg { color: #ef4444; font-size: 13px; text-align: center; margin-top: 10px; min-height: 20px; }
+.login-link { text-align: center; font-size: 13px; color: #a0a0c0; margin-top: 14px; }
+.login-link a { color: #60a5fa; text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="reg-card">
+    <h2>创建新账号</h2>
+    <p class="subtitle">注册后默认为游客权限，需管理员提权</p>
+    <div class="form-group">
+        <label>用户名 <span style="color:#ef4444;">*</span></label>
+        <input type="text" id="username" placeholder="3-20字符，字母数字下划线" autocomplete="username">
+    </div>
+    <div class="form-group">
+        <label>邮箱 <span class="optional">(选填)</span></label>
+        <input type="email" id="email" placeholder="用于找回密码" autocomplete="email">
+    </div>
+    <div class="form-group">
+        <label>密码 <span style="color:#ef4444;">*</span></label>
+        <input type="password" id="password" placeholder="至少6位" autocomplete="new-password">
+    </div>
+    <div class="form-group">
+        <label>确认密码 <span style="color:#ef4444;">*</span></label>
+        <input type="password" id="confirm" placeholder="再次输入密码" autocomplete="new-password">
+    </div>
+    <button class="btn-register" id="btnReg" onclick="doRegister()">注  册</button>
+    <div class="error-msg" id="error"></div>
+    <div class="login-link">已有账号？<a href="/login">去登录</a></div>
+</div>
+<script>
+async function doRegister() {
+    const username = document.getElementById('username').value.trim();
+    const email = document.getElementById('email').value.trim() || null;
+    const password = document.getElementById('password').value;
+    const confirm = document.getElementById('confirm').value;
+    const errorEl = document.getElementById('error');
+    const btn = document.getElementById('btnReg');
+
+    if (!/^[a-zA-Z0-9_]{3,20}$/.test(username)) {
+        errorEl.textContent = '用户名需要3-20个字符（字母数字下划线）'; return;
+    }
+    if (password.length < 6) {
+        errorEl.textContent = '密码至少需要6个字符'; return;
+    }
+    if (password !== confirm) {
+        errorEl.textContent = '两次密码输入不一致'; return;
+    }
+    btn.disabled = true; btn.textContent = '注册中...'; errorEl.textContent = '';
+
+    try {
+        const resp = await fetch('/api/register', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password, email }),
+        });
+        const data = await resp.json();
+        if (data.success) {
+            const loginResp = await fetch('/api/login', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ login: username, password, remember_me: false }),
+            });
+            const loginData = await loginResp.json();
+            if (loginData.success) {
+                window.location.href = '/chat/';
+            } else {
+                window.location.href = '/login';
+            }
+        } else {
+            errorEl.textContent = data.error || '注册失败';
+        }
+    } catch (e) {
+        errorEl.textContent = '网络错误，请检查连接';
+    } finally {
+        btn.disabled = false; btn.textContent = '注  册';
+    }
+}
+</script>
+</body>
+</html>
