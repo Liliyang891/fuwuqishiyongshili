@@ -271,3 +271,148 @@ def _get_department_name(dept_id):
     row = conn.execute('SELECT name FROM departments WHERE id=?', (dept_id,)).fetchone()
     conn.close()
     return row['name'] if row else None
+
+
+# ========== 部门管理 ==========
+
+def create_department(name):
+    if not name or not name.strip():
+        raise ValueError('部门名称不能为空')
+    name = name.strip()
+    conn = _get_db_conn()
+    existing = conn.execute('SELECT id FROM departments WHERE name=?', (name,)).fetchone()
+    if existing:
+        conn.close()
+        raise ValueError(f'部门已存在: {name}')
+    now = time.time()
+    cursor = conn.execute('INSERT INTO departments (name, created_at) VALUES (?,?)', (name, now))
+    dept_id = cursor.lastrowid
+    conn.commit()
+    conn.close()
+    return {'id': dept_id, 'name': name}
+
+
+def list_departments():
+    conn = _get_db_conn()
+    rows = conn.execute(
+        '''SELECT d.id, d.name, d.created_at,
+                  (SELECT COUNT(*) FROM users u WHERE u.department_id = d.id) as user_count
+           FROM departments d ORDER BY d.id'''
+    ).fetchall()
+    conn.close()
+    return [{'id': r['id'], 'name': r['name'], 'user_count': r['user_count']} for r in rows]
+
+
+def update_department(dept_id, name):
+    if not name or not name.strip():
+        raise ValueError('部门名称不能为空')
+    conn = _get_db_conn()
+    conn.execute('UPDATE departments SET name=? WHERE id=?', (name.strip(), dept_id))
+    conn.commit()
+    conn.close()
+
+
+def delete_department(dept_id):
+    conn = _get_db_conn()
+    count = conn.execute('SELECT COUNT(*) as c FROM users WHERE department_id=?', (dept_id,)).fetchone()['c']
+    if count > 0:
+        conn.close()
+        raise ValueError(f'该部门下有 {count} 个用户，无法删除')
+    conn.execute('DELETE FROM departments WHERE id=?', (dept_id,))
+    conn.commit()
+    conn.close()
+
+
+# ========== 用户管理 ==========
+
+def list_users(role=None, department_id=None, active=None):
+    conn = _get_db_conn()
+    sql = 'SELECT u.id, u.username, u.email, u.role, u.department_id, u.is_active, u.created_at FROM users u WHERE 1=1'
+    params = []
+    if role:
+        sql += ' AND u.role=?'
+        params.append(role)
+    if department_id is not None:
+        sql += ' AND u.department_id=?'
+        params.append(department_id)
+    if active is not None:
+        sql += ' AND u.is_active=?'
+        params.append(1 if active else 0)
+    sql += ' ORDER BY u.id'
+    rows = conn.execute(sql, params).fetchall()
+    conn.close()
+    result = []
+    for r in rows:
+        d = dict(r)
+        d['role_name'] = ROLE_NAMES.get(d['role'], d['role'])
+        if d['department_id']:
+            d['department_name'] = _get_department_name(d['department_id'])
+        else:
+            d['department_name'] = None
+        result.append(d)
+    return result
+
+
+def update_user_role(user_id, role, department_id=None):
+    if role not in ROLE_LEVEL:
+        raise ValueError(f'无效的角色: {role}')
+    conn = _get_db_conn()
+    try:
+        conn.execute(
+            'UPDATE users SET role=?, department_id=? WHERE id=?',
+            (role, department_id, user_id)
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def toggle_user_active(user_id, active):
+    conn = _get_db_conn()
+    conn.execute('UPDATE users SET is_active=? WHERE id=?', (1 if active else 0, user_id))
+    conn.commit()
+    conn.close()
+
+
+def reset_user_password(user_id, new_password):
+    if len(new_password) < 6:
+        raise ValueError('密码至少需要 6 个字符')
+    conn = _get_db_conn()
+    conn.execute(
+        'UPDATE users SET password_hash=? WHERE id=?',
+        (_hash_password(new_password), user_id)
+    )
+    conn.commit()
+    conn.close()
+    return new_password
+
+
+def delete_user(user_id):
+    conn = _get_db_conn()
+    conn.execute('DELETE FROM user_sessions WHERE user_id=?', (user_id,))
+    conn.execute('DELETE FROM users WHERE id=?', (user_id,))
+    conn.commit()
+    conn.close()
+
+
+def get_audit_logs(user_id=None, action=None, from_time=None, to_time=None, limit=200):
+    conn = _get_db_conn()
+    sql = 'SELECT a.id, a.user_id, u.username, a.action, a.detail, a.created_at FROM audit_log a LEFT JOIN users u ON a.user_id = u.id WHERE 1=1'
+    params = []
+    if user_id:
+        sql += ' AND a.user_id=?'
+        params.append(user_id)
+    if action:
+        sql += ' AND a.action=?'
+        params.append(action)
+    if from_time:
+        sql += ' AND a.created_at >= ?'
+        params.append(from_time)
+    if to_time:
+        sql += ' AND a.created_at <= ?'
+        params.append(to_time)
+    sql += ' ORDER BY a.id DESC LIMIT ?'
+    params.append(limit)
+    rows = conn.execute(sql, params).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]

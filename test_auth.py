@@ -194,3 +194,56 @@ def test_can_execute_tool():
     user = {'role': 'super_admin', 'department_id': None}
     ok, msg = auth.can_execute_tool('delete_file', user, 'some/file.txt')
     assert ok is True
+
+
+def test_create_department():
+    import auth
+    dept = auth.create_department('技术部')
+    assert dept['name'] == '技术部'
+
+
+def test_list_departments():
+    import auth
+    auth.create_department('技术部')
+    auth.create_department('财务部')
+    depts = auth.list_departments()
+    assert len(depts) >= 2
+
+
+def test_update_user_role():
+    import auth
+    dept = auth.create_department('技术部')
+    user = auth.register_user('promoteme', 'password123')
+    auth.update_user_role(user['id'], 'staff', dept['id'])
+    conn = _get_db_conn()
+    row = conn.execute('SELECT role, department_id FROM users WHERE id=?', (user['id'],)).fetchone()
+    conn.close()
+    assert row['role'] == 'staff'
+    assert row['department_id'] == dept['id']
+
+
+def test_toggle_user_active():
+    import auth
+    user = auth.register_user('toggleuser', 'password123')
+    auth.toggle_user_active(user['id'], False)
+    conn = _get_db_conn()
+    row = conn.execute('SELECT is_active FROM users WHERE id=?', (user['id'],)).fetchone()
+    conn.close()
+    assert row['is_active'] == 0
+
+
+def test_list_users():
+    import auth
+    auth.create_department('技术部')
+    auth.register_user('user1', 'password123')
+    auth.register_user('user2', 'password123', email='a@b.com')
+    users = auth.list_users()
+    assert len(users) >= 2
+
+
+def test_reset_password():
+    import auth
+    user = auth.register_user('resetuser', 'password123')
+    new_pass = auth.reset_user_password(user['id'], 'newpass456')
+    token = auth.login_user('resetuser', 'newpass456')
+    assert token is not None
