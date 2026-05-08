@@ -310,6 +310,33 @@ class RequestHandler(BaseHTTPRequestHandler):
             # 文件下载/预览
             file_path = parsed.path[len('/api/files/'):]
             self._handle_file_download(file_path)
+        elif parsed.path == '/api/admin/users':
+            user = self._require_role('super_admin')
+            if user is None: return
+            qs = parse_qs(parsed.query)
+            role = qs.get('role', [None])[0]
+            dept_id = qs.get('department_id', [None])[0]
+            active = qs.get('active', [None])[0]
+            users = auth_module.list_users(
+                role=role,
+                department_id=int(dept_id) if dept_id else None,
+                active=active.lower() == 'true' if active else None
+            )
+            self._send_json(200, {'success': True, 'users': users})
+        elif parsed.path == '/api/admin/departments':
+            user = self._require_role('super_admin')
+            if user is None: return
+            depts = auth_module.list_departments()
+            self._send_json(200, {'success': True, 'departments': depts})
+        elif parsed.path == '/api/admin/audit-logs':
+            user = self._require_role('super_admin')
+            if user is None: return
+            qs = parse_qs(parsed.query)
+            logs = auth_module.get_audit_logs(
+                user_id=qs.get('user_id', [None])[0],
+                action=qs.get('action', [None])[0],
+            )
+            self._send_json(200, {'success': True, 'logs': logs})
         else:
             body = b'Not Found'
             self.send_response(404)
@@ -370,6 +397,61 @@ class RequestHandler(BaseHTTPRequestHandler):
 
         elif parsed.path == '/api/speech':
             self._handle_speech(content_type)
+
+        elif parsed.path.startswith('/api/admin/'):
+            user = self._require_role('super_admin')
+            if user is None: return
+            content_length = int(self.headers.get('Content-Length', 0))
+            body = self.rfile.read(content_length).decode('utf-8')
+            try:
+                data = json.loads(body)
+            except json.JSONDecodeError:
+                self._send_json(400, {'success': False, 'error': '请求格式错误'})
+                return
+
+            if parsed.path == '/api/admin/departments':
+                try:
+                    dept = auth_module.create_department(data.get('name', ''))
+                    self._send_json(200, {'success': True, 'department': dept})
+                except ValueError as e:
+                    self._send_json(400, {'success': False, 'error': str(e)})
+            elif parsed.path == '/api/admin/users/reset-password':
+                try:
+                    auth_module.reset_user_password(data['user_id'], data['new_password'])
+                    self._send_json(200, {'success': True, 'message': '密码已重置'})
+                except (ValueError, KeyError) as e:
+                    self._send_json(400, {'success': False, 'error': str(e)})
+            elif parsed.path.startswith('/api/admin/users/') and parsed.path.endswith('/role'):
+                user_id = int(parsed.path.split('/')[-2])
+                try:
+                    auth_module.update_user_role(
+                        user_id,
+                        data.get('role', 'guest'),
+                        data.get('department_id')
+                    )
+                    if 'is_active' in data:
+                        auth_module.toggle_user_active(user_id, data['is_active'])
+                    self._send_json(200, {'success': True, 'message': '用户已更新'})
+                except ValueError as e:
+                    self._send_json(400, {'success': False, 'error': str(e)})
+            elif parsed.path.startswith('/api/admin/users/') and parsed.path.endswith('/delete'):
+                user_id = int(parsed.path.split('/')[-2])
+                auth_module.delete_user(user_id)
+                self._send_json(200, {'success': True, 'message': '用户已删除'})
+            elif parsed.path.startswith('/api/admin/departments/') and parsed.path.endswith('/update'):
+                dept_id = int(parsed.path.split('/')[-2])
+                try:
+                    auth_module.update_department(dept_id, data.get('name', ''))
+                    self._send_json(200, {'success': True, 'message': '部门已更新'})
+                except ValueError as e:
+                    self._send_json(400, {'success': False, 'error': str(e)})
+            elif parsed.path.startswith('/api/admin/departments/') and parsed.path.endswith('/delete'):
+                dept_id = int(parsed.path.split('/')[-2])
+                try:
+                    auth_module.delete_department(dept_id)
+                    self._send_json(200, {'success': True, 'message': '部门已删除'})
+                except ValueError as e:
+                    self._send_json(400, {'success': False, 'error': str(e)})
 
         else:
             body = b'Not Found'
