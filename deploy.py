@@ -13,27 +13,52 @@ HOST = os.environ.get('SSH_HOST', '')
 PORT = int(os.environ.get('SSH_PORT', 22))
 USER = os.environ.get('SSH_USER', 'root')
 PASSWORD = os.environ.get('SSH_PASSWORD', '')
+SSH_KEY = os.environ.get('SSH_KEY', '')  # SSH 私钥路径
+SSH_KEY_PASSPHRASE = os.environ.get('SSH_KEY_PASSPHRASE', '')
 REMOTE_DIR = os.environ.get('REMOTE_DIR', '/root/fuwuqishiyongshili')
 
 LOCAL_FILES = [
     'web_server.py',
     'tools.py',
+    'auth.py',
     '.env',
     'gui_client.py',
     'requirements.txt',
     'Dockerfile',
 ]
 
+LOCAL_DIRS = [
+    'static',
+]
+
 
 def deploy():
-    if not HOST or not PASSWORD:
-        print("错误：请在 .env 中配置 SSH_HOST 和 SSH_PASSWORD")
+    if not HOST:
+        print("错误：请在 .env 中配置 SSH_HOST")
+        return
+    if not PASSWORD and not SSH_KEY:
+        print("错误：请在 .env 中配置 SSH_PASSWORD 或 SSH_KEY")
         return
 
     print("=== 连接到远程服务器 ===")
     ssh = paramiko.SSHClient()
     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    ssh.connect(HOST, port=PORT, username=USER, password=PASSWORD, timeout=30)
+
+    if SSH_KEY:
+        key_path = os.path.expanduser(SSH_KEY)
+        if not os.path.exists(key_path):
+            print(f"错误：SSH 私钥文件不存在: {key_path}")
+            return
+        key = paramiko.RSAKey.from_private_key_file(
+            key_path,
+            password=SSH_KEY_PASSPHRASE or None
+        ) if SSH_KEY_PASSPHRASE else paramiko.RSAKey.from_private_key_file(key_path)
+        ssh.connect(HOST, port=PORT, username=USER, pkey=key, timeout=30)
+        print(f"使用密钥认证: {key_path}")
+    else:
+        ssh.connect(HOST, port=PORT, username=USER, password=PASSWORD, timeout=30)
+        print("使用密码认证")
+
     print("连接成功")
 
     sftp = ssh.open_sftp()
@@ -54,6 +79,31 @@ def deploy():
             print(f"  上传: {f}")
         else:
             print(f"  跳过(不存在): {f}")
+
+    # 上传目录
+    for d in LOCAL_DIRS:
+        local_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), d)
+        remote_dir = f'{REMOTE_DIR}/{d}'
+        if os.path.isdir(local_dir):
+            try:
+                sftp.stat(remote_dir)
+            except IOError:
+                sftp.mkdir(remote_dir)
+            for root, dirs, files in os.walk(local_dir):
+                rel_root = os.path.relpath(root, local_dir)
+                dest_dir = os.path.join(remote_dir, rel_root).replace('\\', '/')
+                for sub_dir in dirs:
+                    try:
+                        sftp.stat(os.path.join(dest_dir, sub_dir).replace('\\', '/'))
+                    except IOError:
+                        sftp.mkdir(os.path.join(dest_dir, sub_dir).replace('\\', '/'))
+                for file in files:
+                    src = os.path.join(root, file)
+                    dst = os.path.join(dest_dir, file).replace('\\', '/')
+                    sftp.put(src, dst)
+            print(f"  上传目录: {d}")
+        else:
+            print(f"  跳过目录(不存在): {d}")
 
     print("\n=== 停止旧服务 ===")
     ssh.exec_command('pkill -f "python3 web_server.py" || true')
