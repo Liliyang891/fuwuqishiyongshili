@@ -2,7 +2,7 @@
 name: user_count
 description: 查询注册用户数量和部门数量
 min_role: guest
-priority: 10
+priority: 13
 category: stats
 intent_patterns:
   - (多少|几个|查询|查看|目前|当前|现在|一共).*(人|员工|用户|注册|账号|成员)
@@ -13,6 +13,10 @@ intent_keywords:
   - 人数
   - 用户列表
   - 员工列表
+  - 有多少人
+  - 有多少员工
+  - 多少人
+  - 多少员工
 handler:
   type: sql
   db: users
