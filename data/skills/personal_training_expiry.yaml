@@ -1,0 +1,42 @@
+# 技能：培训到期提醒
+name: training_expiry
+description: 查看即将过期或已过期的培训证书/资质
+min_role: staff
+priority: 9
+category: training
+intent_patterns:
+  - (培训|证书|资质|资格|GxP|GMP|GLP|GCP).*(过期|到期|快到期|即将|失效|提醒)
+  - (什么|哪些|哪个).*(培训|证书|资质).*(过期|到期|快到期|失效)
+  - (检查|查看).*(培训|证书).*(有效期|过期|到期)
+intent_keywords:
+  - 培训过期
+  - 证书过期
+  - 资质过期
+  - 到期提醒
+  - 即将过期
+  - 有效期
+handler:
+  type: sql
+  db: app
+  result_mode: list
+  sql: |
+    SELECT training_name, training_type,
+      datetime(expires_at, 'unixepoch', 'localtime') as expire_date,
+      CASE
+        WHEN expires_at < {unix_now} THEN '已过期'
+        WHEN expires_at < {unix_7days} THEN '7天内到期'
+        WHEN expires_at < {unix_30days} THEN '30天内到期'
+        ELSE '有效'
+      END as urgency,
+      trainer
+    FROM training_records
+    WHERE user_id = {id}
+      AND status != 'pending'
+      AND expires_at IS NOT NULL
+      AND expires_at < {unix_30days}
+    ORDER BY expires_at ASC
+    LIMIT 10
+  row_template: "  • [{urgency}] {training_name}（{training_type}） | 到期: {expire_date} | 培训师: {trainer}"
+  result_template: |
+    即将到期/已过期的培训共 **{total_count}** 条：
+    {rows}

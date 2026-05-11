@@ -1,0 +1,18 @@
+# 技能：公告搜索
+name: announcement_search
+description: 按类别或关键词搜索公告
+min_role: guest
+priority: 11
+category: notice
+intent_patterns:
+  - (搜索|查找|查|搜).*(公告|通知)
+  - (紧急|重要|活动|放假|会议|培训|安全|质量).*(公告|通知)
+intent_keywords:
+  - 紧急公告
+  - 重要通知
+  - 放假通知
+  - 活动通知
+  - 会议通知
+handler:
+  type: function
+  function: agent.skill_registry_handlers.search_announcements

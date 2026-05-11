@@ -1,0 +1,41 @@
+# 技能：最新公告
+name: announcements
+description: 查看公司最新公告通知
+min_role: guest
+priority: 10
+category: notice
+intent_patterns:
+  - (最新|最近|有.?什么|看|查|查看|显示|列出).*(公告|通知|消息|动态|新闻|资讯)
+  - (公告|通知|消息|动态|新闻|资讯).*(最新|最近|有什么|有哪些|列表|查看)
+  - (公司|企业).*(有.?什么|最新|最近).*(公告|通知|消息|动态)
+intent_keywords:
+  - 公告
+  - 通知
+  - 公司通知
+  - 最新消息
+  - 公司动态
+  - 新闻
+handler:
+  type: sql
+  db: app
+  result_mode: list
+  sql: |
+    SELECT title, content,
+      CASE category
+        WHEN 'urgent' THEN '紧急'
+        WHEN 'event' THEN '活动'
+        WHEN 'policy' THEN '制度'
+        WHEN 'general' THEN '一般'
+        ELSE category
+      END as category_name,
+      CASE priority WHEN 2 THEN '🔴' WHEN 1 THEN '🟡' ELSE '🟢' END as level,
+      creator_name,
+      datetime(created_at, 'unixepoch', 'localtime') as pub_date
+    FROM announcements
+    WHERE is_active = 1 AND (expires_at IS NULL OR expires_at > {unix_now})
+    ORDER BY priority DESC, created_at DESC
+    LIMIT 10
+  row_template: "  • {level} [{category_name}] **{title}** — {pub_date}\n    {content}"
+  result_template: |
+    最新公告共 **{total_count}** 条：
+    {rows}

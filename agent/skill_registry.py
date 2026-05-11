@@ -265,12 +265,23 @@ class SkillRegistry:
             return {'success': False, 'reply': f'查询数据时出错: {e}'}
 
     def _interpolate_user_vars(self, sql: str, user: Optional[dict]) -> str:
-        """替换 SQL 中的 {user.field} 占位符，自动转义"""
-        if not user:
-            return sql
+        """替换 SQL 中的 {fieldname} 占位符，自动转义。支持动态时间变量。"""
+        import time as _time
+
+        now = _time.time()
 
         def replacer(m):
             key = m.group(1)
+            # 动态时间变量
+            if key == 'unix_now':
+                return str(int(now))
+            if key == 'unix_7days':
+                return str(int(now + 7 * 86400))
+            if key == 'unix_30days':
+                return str(int(now + 30 * 86400))
+
+            if user is None:
+                return 'NULL'
             val = user.get(key)
             if val is None:
                 return 'NULL'

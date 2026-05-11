@@ -1,0 +1,42 @@
+# 技能：我的培训记录
+name: my_training
+description: 查看个人培训完成情况和记录
+min_role: staff
+priority: 10
+category: training
+intent_patterns:
+  - (我的|我|个人).*(培训|训练|学习).*(记录|历史|情况|完成|课程|进度)
+  - (培训|训练|学习).*(我的|我|个人).*(记录|历史|情况|课程)
+  - (查看|显示|列出).*(培训|训练).*(记录|课程|情况)
+intent_keywords:
+  - 培训记录
+  - 我的培训
+  - 培训课程
+  - 学习记录
+  - 培训情况
+  - 培训历史
+handler:
+  type: sql
+  db: app
+  result_mode: list
+  sql: |
+    SELECT training_name, training_type,
+      CASE status
+        WHEN 'completed' THEN '已完成'
+        WHEN 'pending' THEN '待完成'
+        WHEN 'expired' THEN '已过期'
+        ELSE status
+      END as status_name,
+      CASE WHEN score IS NOT NULL THEN score||'分' ELSE '—' END as score_display,
+      CASE WHEN completed_at THEN datetime(completed_at, 'unixepoch', 'localtime') ELSE '—' END as completed_date,
+      CASE WHEN expires_at THEN datetime(expires_at, 'unixepoch', 'localtime') ELSE '永久' END as expire_date
+    FROM training_records
+    WHERE user_id = {id}
+    ORDER BY
+      CASE status WHEN 'expired' THEN 1 WHEN 'pending' THEN 2 WHEN 'completed' THEN 3 END,
+      completed_at DESC
+    LIMIT 15
+  row_template: "  • [{status_name}] {training_name}（{training_type}） | 完成: {completed_date} | 有效期: {expire_date} | 成绩: {score_display}"
+  result_template: |
+    你的培训记录共 **{total_count}** 条：
+    {rows}

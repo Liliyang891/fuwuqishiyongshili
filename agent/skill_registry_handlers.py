@@ -267,3 +267,120 @@ def search_policies(*, user: dict, user_text: str = None) -> dict:
         for r in rows
     )
     return {'success': True, 'reply': f'找到 **{len(rows)}** 条相关制度：\n{result}'}
+
+
+def search_announcements(*, user: dict, user_text: str = None) -> dict:
+    """公告搜索：按类别或关键词搜索公告"""
+    import os, sqlite3, time
+
+    text = user_text or ''
+    db_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                           'data', 'app.db')
+    conn = sqlite3.connect(db_path)
+
+    now = time.time()
+    # 提取类别关键词
+    cat_map = {
+        '紧急': 'urgent', '重要': 'urgent',
+        '活动': 'event', '会议': 'event',
+        '放假': 'general', '假期': 'general',
+        '制度': 'policy', '政策': 'policy',
+    }
+
+    matched_cats = set()
+    for kw, cat in cat_map.items():
+        if kw in text:
+            matched_cats.add(cat)
+
+    if matched_cats:
+        clauses = ' OR '.join(['category = ?' for _ in matched_cats])
+        rows = conn.execute(
+            f'SELECT title, content, category, creator_name, '
+            f'datetime(created_at, "unixepoch", "localtime") as pub_date '
+            f'FROM announcements WHERE is_active = 1 AND (expires_at IS NULL OR expires_at > ?) '
+            f'AND ({clauses}) '
+            f'ORDER BY priority DESC, created_at DESC LIMIT 10',
+            [now] + list(matched_cats)
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            'SELECT title, content, category, creator_name, '
+            'datetime(created_at, "unixepoch", "localtime") as pub_date '
+            'FROM announcements WHERE is_active = 1 AND (expires_at IS NULL OR expires_at > ?) '
+            'ORDER BY priority DESC, created_at DESC LIMIT 10',
+            (now,)
+        ).fetchall()
+
+    conn.close()
+
+    if not rows:
+        return {'success': True, 'reply': '当前没有相关公告。'}
+
+    cat_names = {'urgent': '紧急', 'event': '活动', 'policy': '制度', 'general': '一般'}
+    result = '\n'.join(
+        f'  • [{cat_names.get(r[2], r[2])}] **{r[0]}** — {r[4]}\n    {r[1][:120]}'
+        for r in rows
+    )
+    return {'success': True, 'reply': f'找到 **{len(rows)}** 条公告：\n{result}'}
+
+
+def search_sop(*, user: dict, user_text: str = None) -> dict:
+    """SOP搜索：按关键词/部门搜索标准操作规程"""
+    import os, sqlite3
+
+    text = user_text or ''
+    db_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                           'data', 'app.db')
+    conn = sqlite3.connect(db_path)
+
+    # 从输入中提取搜索词（滑动窗口方式，避免贪婪匹配遗漏关键词）
+    import re
+    stop = {'搜索', '查', '找', '查看', '查查', '找找', 'sop', 'SOP',
+            '操作规程', '标准操作', '标准操作规程', '操作流程', '规程',
+            '在哪', '有哪些', '哪个', '什么', '哪些', '帮我', '一下'}
+
+    # 先移除停用词再提取
+    cleaned = text
+    for w in sorted(stop, key=len, reverse=True):
+        cleaned = cleaned.replace(w, ' ')
+    # 提取所有2-3字中文片段（滑动窗口，非贪婪）
+    search_terms = []
+    for start in range(len(cleaned)):
+        for length in (3, 2):
+            seg = cleaned[start:start+length]
+            if len(seg) == length and all('一' <= c <= '鿿' for c in seg):
+                if seg not in stop:
+                    search_terms.append(seg)
+    # 去重保持顺序
+    seen = set()
+    search_terms = [t for t in search_terms if not (t in seen or seen.add(t))][:6]
+
+    if search_terms:
+        clauses = ' OR '.join(['(title LIKE ? OR keywords LIKE ? OR content_summary LIKE ?)' for _ in search_terms])
+        params = []
+        for t in search_terms:
+            params += [f'%{t}%', f'%{t}%', f'%{t}%']
+        rows = conn.execute(
+            f'SELECT title, doc_number, version, category, department_name, content_summary '
+            f'FROM sop_documents WHERE status = \'active\' AND ({clauses}) '
+            f'ORDER BY updated_at DESC LIMIT 12',
+            params
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            'SELECT title, doc_number, version, category, department_name, content_summary '
+            'FROM sop_documents WHERE status = \'active\' '
+            'ORDER BY updated_at DESC LIMIT 12'
+        ).fetchall()
+
+    conn.close()
+
+    if not rows:
+        return {'success': True,
+                'reply': '未找到相关SOP。你可以尝试搜索"称量"、"变更"、"偏差"、"检测"等关键词。'}
+
+    result = '\n'.join(
+        f'  • [{r[3]}] **{r[0]}** v{r[2]}（{r[1]}）\n    部门：{r[4] or "通用"} | {r[5][:100]}'
+        for r in rows
+    )
+    return {'success': True, 'reply': f'找到 **{len(rows)}** 条SOP：\n{result}'}

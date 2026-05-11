@@ -1,0 +1,36 @@
+# 技能：最近更新的SOP
+name: sop_recent
+description: 查看最近更新或新增的标准操作规程
+min_role: guest
+priority: 9
+category: sop
+intent_patterns:
+  - (最新|最近|近期|更新|新增).*(SOP|操作规程|标准操作|规程)
+  - (SOP|操作规程|标准操作|规程).*(最新|最近|更新|变更|修订|目录|列表)
+  - (查看|列出|显示).*(SOP|操作规程).*(列表|目录)
+  - (SOP|操作规程|规程).*(有哪些|什么|哪些)
+intent_keywords:
+  - SOP列表
+  - SOP目录
+  - 最新SOP
+  - 操作规程列表
+  - 操作规程目录
+  - 操作规程
+  - SOP
+handler:
+  type: sql
+  db: app
+  result_mode: list
+  sql: |
+    SELECT title, doc_number, version, category,
+      department_name,
+      content_summary,
+      datetime(updated_at, 'unixepoch', 'localtime') as updated_date
+    FROM sop_documents
+    WHERE status = 'active'
+    ORDER BY updated_at DESC
+    LIMIT 12
+  row_template: "  • [{category}] **{title}** v{version}（{doc_number}）\n    部门：{department_name} | 更新：{updated_date}\n    摘要：{content_summary}"
+  result_template: |
+    最新操作规程共 **{total_count}** 条：
+    {rows}

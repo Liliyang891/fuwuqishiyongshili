@@ -208,6 +208,52 @@ def _init_app_db():
             resolved_at REAL
         )
     ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS announcements (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL,
+            content TEXT NOT NULL DEFAULT '',
+            category TEXT DEFAULT 'general',
+            priority INTEGER DEFAULT 0,
+            created_by INTEGER,
+            creator_name TEXT,
+            created_at REAL,
+            expires_at REAL,
+            is_active INTEGER DEFAULT 1
+        )
+    ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS training_records (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            training_name TEXT NOT NULL,
+            training_type TEXT DEFAULT 'other',
+            status TEXT DEFAULT 'pending',
+            completed_at REAL,
+            expires_at REAL,
+            score REAL,
+            trainer TEXT DEFAULT '',
+            notes TEXT DEFAULT '',
+            created_at REAL
+        )
+    ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS sop_documents (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL,
+            doc_number TEXT DEFAULT '',
+            category TEXT DEFAULT 'general',
+            version TEXT DEFAULT '1.0',
+            department_id INTEGER,
+            department_name TEXT DEFAULT '',
+            file_path TEXT DEFAULT '',
+            content_summary TEXT DEFAULT '',
+            keywords TEXT DEFAULT '',
+            status TEXT DEFAULT 'active',
+            created_at REAL,
+            updated_at REAL
+        )
+    ''')
     conn.commit()
     conn.close()
 
