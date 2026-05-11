@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>博爱医药 — AI 智能管理平台</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        :root {
+            --green: #4bb42d;
+            --green-dark: #3a8a22;
+            --green-light: #e8f5e0;
+            --green-pale: #f4faf0;
+            --text: #2d3748;
+            --text-light: #5a6b7a;
+            --white: #ffffff;
+            --shadow: 0 4px 24px rgba(75,180,45,0.10);
+            --radius: 16px;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            background: linear-gradient(180deg, #f4faf0 0%, #ffffff 40%, #f9fafb 100%);
+            color: var(--text);
+            min-height: 100vh;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* ====== Nav ====== */
+        .nav {
+            display: flex; align-items: center; justify-content: space-between;
+            max-width: 1100px; margin: 0 auto; padding: 20px 24px;
+        }
+        .nav-brand {
+            display: flex; align-items: center;
+            text-decoration: none;
+        }
+        .nav-brand .logo-img { height: 36px; width: auto; }
+        .nav-links { display: flex; gap: 24px; align-items: center; }
+        .nav-links a {
+            text-decoration: none; color: var(--text-light); font-size: 14px;
+            font-weight: 500; transition: color 0.2s;
+        }
+        .nav-links a:hover { color: var(--green); }
+        .nav-login {
+            padding: 8px 20px; border-radius: 8px;
+            background: var(--green); color: #fff !important;
+            font-weight: 600; transition: all 0.2s;
+        }
+        .nav-login:hover { background: var(--green-dark); color: #fff !important; }
+
+        /* ====== Hero ====== */
+        .hero {
+            text-align: center; padding: 60px 24px 50px;
+            max-width: 700px; margin: 0 auto;
+        }
+        .hero-logo { margin-bottom: 28px; }
+        .hero-logo img {
+            height: 130px; width: auto;
+            filter: drop-shadow(0 6px 20px rgba(75,180,45,0.12));
+        }
+        .hero .badge {
+            display: inline-block; padding: 6px 16px; border-radius: 20px;
+            background: var(--green-pale); color: var(--green-dark);
+            font-size: 13px; font-weight: 600; margin-bottom: 24px;
+            border: 1px solid rgba(75,180,45,0.15);
+        }
+        .hero h1 {
+            font-size: 48px; font-weight: 800; color: #1a3a1a;
+            line-height: 1.2; margin-bottom: 20px; letter-spacing: -1px;
+        }
+        .hero h1 span {
+            background: linear-gradient(135deg, var(--green), #5dc53a);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        }
+        .hero .subtitle {
+            font-size: 17px; color: var(--text-light); line-height: 1.8;
+            max-width: 480px; margin: 0 auto 36px;
+        }
+        .hero-actions { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+        .btn-primary {
+            display: inline-flex; align-items: center; gap: 8px;
+            padding: 14px 36px; border-radius: 12px;
+            background: linear-gradient(135deg, var(--green), var(--green-dark));
+            color: #fff; text-decoration: none; font-size: 16px; font-weight: 600;
+            box-shadow: 0 4px 20px rgba(75,180,45,0.30);
+            transition: all 0.25s;
+        }
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 30px rgba(75,180,45,0.40);
+        }
+        .btn-outline {
+            display: inline-flex; align-items: center; gap: 8px;
+            padding: 14px 36px; border-radius: 12px;
+            border: 2px solid var(--green); color: var(--green-dark);
+            text-decoration: none; font-size: 16px; font-weight: 600;
+            background: #fff; transition: all 0.25s;
+        }
+        .btn-outline:hover {
+            background: var(--green-pale); transform: translateY(-2px);
+        }
+
+        /* ====== Features ====== */
+        .section-title {
+            text-align: center; font-size: 30px; font-weight: 700;
+            color: #1a3a1a; margin-bottom: 8px;
+        }
+        .section-sub {
+            text-align: center; font-size: 15px; color: var(--text-light);
+            margin-bottom: 48px;
+        }
+        .features {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px; max-width: 960px; margin: 0 auto; padding: 0 24px;
+        }
+        .feature-card {
+            background: var(--white); border: 1px solid #e8f0e4;
+            border-radius: var(--radius); padding: 32px 28px;
+            text-align: left; transition: all 0.3s; cursor: default;
+        }
+        .feature-card:hover {
+            transform: translateY(-4px);
+            border-color: var(--green);
+            box-shadow: var(--shadow);
+        }
+        .feature-card .icon {
+            width: 48px; height: 48px; border-radius: 12px;
+            background: var(--green-pale);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 24px; margin-bottom: 16px;
+        }
+        .feature-card h3 { font-size: 17px; color: #1a3a1a; margin-bottom: 8px; }
+        .feature-card p { font-size: 14px; color: var(--text-light); line-height: 1.7; }
+
+        /* ====== Footer ====== */
+        .footer {
+            text-align: center; padding: 32px 20px;
+            color: #9ab09a; font-size: 13px; border-top: 1px solid #e8f0e4;
+        }
+        .footer .footer-logo { height: 28px; width: auto; margin-bottom: 12px; opacity: 0.6; }
+        .footer a { color: var(--green); text-decoration: none; }
+
+        /* ====== Responsive ====== */
+        @media (max-width: 640px) {
+            .hero h1 { font-size: 32px; }
+            .hero-logo img { height: 100px; }
+            .nav-brand .logo-img { height: 28px; }
+        }
+    </style>
+</head>
+<body>
+
+    <nav class="nav">
+        <a href="/" class="nav-brand">
+            <img class="logo-img" src="/static/img/logo-text.png" alt="博爱医药">
+        </a>
+        <div class="nav-links">
+            <a href="/">首页</a>
+            <a href="/chat/">AI 助手</a>
+            <a href="/register">注册</a>
+            <a href="/login" class="nav-login">登录</a>
+        </div>
+    </nav>
+
+    <section class="hero">
+        <div class="hero-logo">
+            <img src="/static/img/logo-icon.png" alt="博爱医药 Logo">
+        </div>
+        <div class="badge">AI 智能管理平台</div>
+        <h1>博爱医药 <span>AI 管理平台</span></h1>
+        <p class="subtitle">
+            基于 AI Agent 的医药数据智能管理平台，通过自然语言对话即可完成文件管理、数据库操作、数据分析等复杂业务任务。
+        </p>
+        <div class="hero-actions">
+            <a href="/chat/" class="btn-primary">进入 AI 助手 →</a>
+            <a href="/register" class="btn-outline">注册账号</a>
+        </div>
+    </section>
+
+    <section class="features">
+        <div class="feature-card">
+            <div class="icon">📁</div>
+            <h3>智能文件管理</h3>
+            <p>上传、搜索、编辑、压缩、解压文件，AI 帮你自动完成批量操作与目录管理，支持多角色权限隔离。</p>
+        </div>
+        <div class="feature-card">
+            <div class="icon">🗄️</div>
+            <h3>数据库操作</h3>
+            <p>用自然语言描述需求，AI 自动转化为 SQL 执行建表、查询、增删改查，无需手写一行代码。</p>
+        </div>
+        <div class="feature-card">
+            <div class="icon">💬</div>
+            <h3>AI 智能对话</h3>
+            <p>支持多模型切换，Function Calling 原生驱动，AI 自动调用工具链完成任务，支持计划模式与子智能体。</p>
+        </div>
+        <div class="feature-card">
+            <div class="icon">🔐</div>
+            <h3>权限分级管理</h3>
+            <p>6 级 RBAC 角色体系（超管→董事长→总经理→部门长→职员→游客），精细控制数据访问与操作权限。</p>
+        </div>
+        <div class="feature-card">
+            <div class="icon">📋</div>
+            <h3>策略与审批</h3>
+            <p>内置请假申请、审批流程，支持自定义管理策略，部门长可创建、审批、管理团队操作规范。</p>
+        </div>
+        <div class="feature-card">
+            <div class="icon">🔍</div>
+            <h3>日志与审计</h3>
+            <p>完整的操作审计日志，追踪所有关键操作记录，满足医药行业合规审计要求。</p>
+        </div>
+    </section>
+
+    <footer class="footer">
+        <img class="footer-logo" src="/static/img/logo-text.png" alt="博爱医药"><br>
+        <a href="/chat/">AI 助手</a> · <a href="/login">登录</a><br>
+        &copy; 2026 博爱医药 · 基于 AI Agent 技术构建
+    </footer>
+</body>
+</html>

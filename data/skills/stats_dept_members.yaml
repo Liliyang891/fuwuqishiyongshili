@@ -1,0 +1,30 @@
+# 技能：各部门成员详情
+name: dept_members
+description: 查看各部门人员分布
+min_role: guest
+priority: 11
+category: org
+intent_patterns:
+  - (各部门|每个部门|部门里|部门内).*(有谁|有.?哪些人|有.?什么人|成员|人员|员工)
+  - (谁|哪些人|什么人).*(在|属于|是).*(每个|哪个|什么).*部门
+  - (人员|员工).*(分布|情况|安排|归属)
+intent_keywords:
+  - 部门成员
+  - 部门人员
+  - 人员分布
+  - 人员情况
+  - 员工分布
+handler:
+  type: sql
+  db: users
+  result_mode: list
+  sql: |
+    SELECT d.name as dept,
+      COALESCE((SELECT GROUP_CONCAT(u.username, ', ') FROM users u WHERE u.department_id = d.id AND u.is_active = 1), '(暂无)') as members,
+      (SELECT COUNT(*) FROM users u WHERE u.department_id = d.id AND u.is_active = 1) as cnt
+    FROM departments d
+    ORDER BY d.id
+  row_template: "  • **{dept}**（{cnt}人）：{members}"
+  result_template: |
+    当前共有 **{total_count}** 个部门，人员分布如下：
+    {rows}

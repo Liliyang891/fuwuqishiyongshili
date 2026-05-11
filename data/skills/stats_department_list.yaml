@@ -1,0 +1,26 @@
+# 技能：部门列表
+name: department_list
+description: 列出所有部门及其在职人数
+min_role: guest
+priority: 10
+category: stats
+intent_patterns:
+  - (有哪些|列出|显示|查看|查询|什么|多少).*(部门)
+  - (部门).*(有哪些|列表|列出|查询)
+intent_keywords:
+  - 部门
+  - 部门列表
+handler:
+  type: sql
+  db: users
+  result_mode: list
+  sql: |
+    SELECT d.name as name, COUNT(u.id) as cnt
+    FROM departments d
+    LEFT JOIN users u ON u.department_id = d.id AND u.is_active = 1
+    GROUP BY d.id
+    ORDER BY d.id
+  row_template: "  • {name}（{cnt}人）"
+  result_template: |
+    当前共有 **{total_count}** 个部门：
+    {rows}

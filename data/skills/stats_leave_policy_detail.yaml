@@ -1,0 +1,34 @@
+# 技能：请假制度详情
+name: leave_policy_detail
+description: 查看现行请假制度和审批规则
+min_role: guest
+priority: 10
+category: policy
+intent_patterns:
+  - (请假|休假|调休|年假|病假|事假).*(制度|规定|政策|规则|怎么|如何|流程|审批|天数|标准)
+  - (制度|规定|政策|规则).*(请假|休假|调休)
+  - (怎么|如何|怎么样).*(请假|休假)
+intent_keywords:
+  - 请假制度
+  - 请假规定
+  - 请假流程
+  - 请假规则
+  - 休假制度
+  - 休假规定
+handler:
+  type: sql
+  db: app
+  result_mode: list
+  sql: |
+    SELECT name, type,
+      CASE WHEN scope = 'all' THEN '全员适用' ELSE scope END as scope_name,
+      rules,
+      creator_name,
+      datetime(created_at, 'unixepoch', 'localtime') as created_date
+    FROM policies
+    WHERE is_active = 1 AND type LIKE '%leave%'
+    ORDER BY created_at DESC
+  row_template: "  • **{name}**（{scope_name}）\n    规则：{rules}\n    制定人：{creator_name} | {created_date}"
+  result_template: |
+    当前请假相关制度共 **{total_count}** 条：
+    {rows}

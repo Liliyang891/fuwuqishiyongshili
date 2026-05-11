@@ -11,6 +11,7 @@ import sqlite3
 import shutil
 import hashlib
 import time
+import threading
 import zipfile
 import tarfile
 import fnmatch
@@ -23,34 +24,104 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(BASE_DIR, 'data')
 FILES_DIR = os.path.join(DATA_DIR, 'files')
 DB_PATH = os.path.join(DATA_DIR, 'app.db')
+USERS_DB_PATH = os.path.join(DATA_DIR, 'users.db')
 
 # 允许操作的文件根目录（安全限制）
 ALLOWED_ROOTS = [os.path.realpath(FILES_DIR)]
+
+from role_levels import ROLE_LEVEL, ROLE_NAMES, ROLE_DISPLAY, SUPERIOR_MAP
+
+# Thread-local 用户上下文
+_user_context = threading.local()
+
+
+def set_file_context(user):
+    """设置当前线程的文件操作上下文（用户信息）"""
+    _user_context.user = user
+
+
+def clear_file_context():
+    """清除当前线程的文件操作上下文"""
+    _user_context.user = None
+
+
+def _get_allowed_roots():
+    """根据当前线程的用户上下文动态计算允许的根目录"""
+    user = getattr(_user_context, 'user', None)
+    if not user:
+        return list(ALLOWED_ROOTS)
+
+    level = user.get('role_level', 0)
+    # 有用户上下文时，只用角色目录+share，不用 FILES_DIR 根（避免越级访问）
+    roots = []
+
+    # 用户可访问 ≤ 自己等级的所有角色目录
+    for role_name, role_level in ROLE_LEVEL.items():
+        if role_level <= level:
+            role_dir = os.path.realpath(os.path.join(FILES_DIR, role_name))
+            if role_dir not in roots:
+                roots.append(role_dir)
+
+    # 共享目录: staff(2)+ 可访问
+    if level >= ROLE_LEVEL.get('staff', 2):
+        share_dir = os.path.realpath(os.path.join(DATA_DIR, 'share'))
+        if share_dir not in roots:
+            roots.append(share_dir)
+
+    return roots
 
 
 def _ensure_dirs():
     """确保目录结构存在"""
     os.makedirs(FILES_DIR, exist_ok=True)
-    _init_db()
+    # 创建角色子目录
+    for role_name in ROLE_LEVEL:
+        os.makedirs(os.path.join(FILES_DIR, role_name), exist_ok=True)
+    # 创建共享目录
+    os.makedirs(os.path.join(DATA_DIR, 'share'), exist_ok=True)
+    _init_app_db()
+    _init_users_db()
 
 
 def _resolve_path(path):
     """
-    解析并安全检查文件路径
+    解析并安全检查文件路径。
+    - 相对路径默认相对于用户角色目录（如 chairman → data/files/chairman/）
+    - 如果路径第一段是角色名或 "share"，则相对于 FILES_DIR
+    - 绝对路径直接 realpath 后检查
     返回: (full_path, error_msg)
     """
     if not path:
         return None, "路径不能为空"
-    # 相对路径相对于 FILES_DIR
+
+    user = getattr(_user_context, 'user', None)
+    user_role = user.get('role', 'guest') if user else None
+
     if os.path.isabs(path):
         full = os.path.realpath(path)
     else:
-        full = os.path.realpath(os.path.join(FILES_DIR, path))
+        # 检查路径第一段是否为已知角色名或 "share"
+        parts = path.replace('\\', '/').split('/', 1)
+        first_part = parts[0]
+        if first_part == 'share':
+            # share/ 指向 data/share/ 而非 data/files/share/
+            full = os.path.realpath(os.path.join(DATA_DIR, path))
+        elif first_part in ROLE_NAMES:
+            # 显式指定了角色前缀，相对于 FILES_DIR
+            full = os.path.realpath(os.path.join(FILES_DIR, path))
+        elif user_role:
+            # 无前缀 → 默认用户自己的角色目录
+            full = os.path.realpath(os.path.join(FILES_DIR, user_role, path))
+        else:
+            # 无用户上下文 → 传统行为，相对于 FILES_DIR
+            full = os.path.realpath(os.path.join(FILES_DIR, path))
+
     # 安全检查：路径必须在允许范围内
-    for root in ALLOWED_ROOTS:
+    allowed = _get_allowed_roots()
+    for root in allowed:
         if full.startswith(root + os.sep) or full == root:
             return full, None
-    return None, f"安全限制：禁止访问路径 '{path}'（不在允许的目录内）"
+    return None, f"安全限制：禁止访问路径 '{path}'（权限不足或目录不存在）"
 
 
 def _format_file_info(path):
@@ -82,10 +153,11 @@ def _human_size(size):
 
 # ========== 数据库初始化 ==========
 
-def _init_db():
-    """初始化 SQLite 数据库（元数据表 + 会话表）"""
+def _init_app_db():
+    """初始化应用数据库 app.db（元数据 + 会话 + 策略 + 请假）"""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
+    cursor.execute("PRAGMA journal_mode=WAL")
     cursor.execute("PRAGMA foreign_keys = ON")
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS _meta (
@@ -105,6 +177,48 @@ def _init_db():
             created_at REAL NOT NULL
         )
     ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS policies (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            type TEXT NOT NULL,
+            name TEXT NOT NULL,
+            rules TEXT NOT NULL DEFAULT '[]',
+            created_by INTEGER,
+            creator_name TEXT,
+            creator_role TEXT,
+            creator_level INTEGER,
+            scope TEXT DEFAULT 'all',
+            is_active INTEGER DEFAULT 1,
+            created_at REAL
+        )
+    ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS leave_requests (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            applicant_id INTEGER,
+            applicant_name TEXT,
+            applicant_role TEXT,
+            days REAL NOT NULL,
+            reason TEXT DEFAULT '',
+            approver_role TEXT,
+            approver_name TEXT,
+            status TEXT DEFAULT 'pending',
+            policy_id INTEGER,
+            created_at REAL,
+            resolved_at REAL
+        )
+    ''')
+    conn.commit()
+    conn.close()
+
+
+def _init_users_db():
+    """初始化用户数据库 users.db（用户 + 部门 + 会话 + 审计），含自动迁移"""
+    is_new = not os.path.exists(USERS_DB_PATH)
+    conn = sqlite3.connect(USERS_DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("PRAGMA journal_mode=WAL")
+    cursor.execute("PRAGMA foreign_keys = ON")
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS departments (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -131,9 +245,15 @@ def _init_db():
             user_id INTEGER NOT NULL,
             created_at REAL,
             expires_at REAL,
+            last_active REAL DEFAULT 0,
             FOREIGN KEY (user_id) REFERENCES users(id)
         )
     ''')
+    # 迁移：为旧版 user_sessions 表补充 last_active 列
+    try:
+        cursor.execute('ALTER TABLE user_sessions ADD COLUMN last_active REAL DEFAULT 0')
+    except Exception:
+        pass  # 列已存在
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS audit_log (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -145,14 +265,82 @@ def _init_db():
         )
     ''')
     conn.commit()
+
+    # 自动迁移：首次创建 users.db 时从 app.db 迁移数据
+    if is_new and os.path.exists(DB_PATH):
+        try:
+            app_conn = sqlite3.connect(DB_PATH)
+            # 检查 app.db 中是否有旧用户表
+            tables = [r[0] for r in app_conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            ).fetchall()]
+            if 'users' in tables:
+                # 按 FK 依赖顺序迁移（先 departments，再 users，再 user_sessions，最后 audit_log）
+                for table in ['departments', 'users', 'user_sessions', 'audit_log']:
+                    app_cursor = app_conn.execute(f'SELECT * FROM {table}')
+                    rows = app_cursor.fetchall()
+                    if rows:
+                        cols = [d[0] for d in app_cursor.description]
+                        placeholders = ','.join(['?' for _ in cols])
+                        cols_sql = ','.join(cols)
+                        for row in rows:
+                            try:
+                                cursor.execute(
+                                    f'INSERT OR IGNORE INTO {table} ({cols_sql}) VALUES ({placeholders})',
+                                    tuple(row)
+                                )
+                            except Exception:
+                                pass  # 跳过冲突行
+                conn.commit()
+                # 迁移成功后，从 app.db 删除旧表
+                for table in ['departments', 'users', 'user_sessions', 'audit_log']:
+                    try:
+                        app_conn.execute(f'DROP TABLE IF EXISTS [{table}]')
+                    except Exception:
+                        pass
+                app_conn.commit()
+            app_conn.close()
+        except Exception:
+            pass  # 迁移失败不影响启动
+
+    # 预设部门（首次初始化或补全缺失项）
+    preset_depts = ['财务部', '采购部', '人事部', '业务部', '外联部', '领导层']
+    for dept_name in preset_depts:
+        try:
+            cursor.execute(
+                'INSERT OR IGNORE INTO departments (name, created_at) VALUES (?, ?)',
+                (dept_name, time.time())
+            )
+        except Exception:
+            pass
+    conn.commit()
+
     conn.close()
 
 
+_db_local = threading.local()
+
 def _get_db_conn():
-    """获取数据库连接"""
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON")
+    """获取数据库连接（线程本地复用）— app.db"""
+    conn = getattr(_db_local, 'conn', None)
+    if conn is None:
+        conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA foreign_keys = ON")
+        _db_local.conn = conn
+    return conn
+
+
+def _get_users_db_conn():
+    """获取用户数据库连接（线程本地复用）— users.db"""
+    conn = getattr(_db_local, 'users_conn', None)
+    if conn is None:
+        conn = sqlite3.connect(USERS_DB_PATH, check_same_thread=False)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA foreign_keys = ON")
+        _db_local.users_conn = conn
     return conn
 
 
@@ -168,7 +356,7 @@ def save_session(session_id, messages, session_ttl=3600):
         VALUES (?, ?, ?, COALESCE((SELECT created_at FROM sessions WHERE session_id=?), ?))
     ''', (session_id, json.dumps(messages, ensure_ascii=False), now, session_id, now))
     conn.commit()
-    conn.close()
+    # conn 由线程本地缓存管理，不关闭
 
 
 def load_session(session_id, session_ttl=3600):
@@ -181,10 +369,13 @@ def load_session(session_id, session_ttl=3600):
         (session_id,)
     )
     row = cursor.fetchone()
-    conn.close()
     if row and now - row['last_active'] <= session_ttl:
-        # 更新最后活跃时间
-        save_session(session_id, json.loads(row['messages']), session_ttl)
+        # 仅更新 last_active 时间戳，不重写整个 messages
+        cursor.execute(
+            'UPDATE sessions SET last_active=? WHERE session_id=?',
+            (now, session_id)
+        )
+        conn.commit()
         return json.loads(row['messages'])
     return []
 
@@ -195,7 +386,7 @@ def delete_session(session_id):
     cursor = conn.cursor()
     cursor.execute('DELETE FROM sessions WHERE session_id=?', (session_id,))
     conn.commit()
-    conn.close()
+    # conn 由线程本地缓存管理，不关闭
 
 
 def cleanup_sessions_db(session_ttl=3600):
@@ -208,7 +399,7 @@ def cleanup_sessions_db(session_ttl=3600):
         (now, session_ttl)
     )
     conn.commit()
-    conn.close()
+    # conn 由线程本地缓存管理，不关闭
 
 
 # ========== 📁 目录操作（5个） ==========
@@ -542,7 +733,7 @@ def replace_text(path, search_text, replace_text, count=0, regex=False):
     try:
         with open(full, 'w', encoding='utf-8') as f:
             f.write(new_content)
-        return {"success": True, "path": path, "replacements": n if n else "全部", "message": f"文本替换完成: {path}"}
+        return {"success": True, "path": path, "replacements": n if n else 0, "message": f"文本替换完成: {path}"}
     except Exception as e:
         return {"success": False, "error": f"写入文件失败: {e}"}
 
@@ -650,7 +841,7 @@ def get_file_info(path):
             with open(full, 'r', encoding='utf-8', errors='replace') as f:
                 lines = f.readlines()
             info["line_count"] = len(lines)
-        except:
+        except (IOError, OSError, UnicodeDecodeError):
             info["line_count"] = None
         info["extension"] = os.path.splitext(full)[1]
     return {"success": True, "path": path, "file_info": info}
@@ -729,7 +920,7 @@ def search_content(folder_path="", text="", file_pattern="*", recursive=False, c
                         "line": i,
                         "content": line.rstrip('\n')[:200],
                     })
-        except:
+        except (IOError, OSError, UnicodeDecodeError, PermissionError):
             pass  # 跳过无法读取的文件
 
     try:
@@ -872,17 +1063,57 @@ def unzip_file(path, dest_folder=""):
         return {"success": False, "error": err}
     os.makedirs(dest_full, exist_ok=True)
 
+    # 解压炸弹保护
+    MAX_TOTAL_SIZE = 500 * 1024 * 1024  # 500MB
+    total_extracted = 0
+
     try:
         name_lower = path.lower()
         if name_lower.endswith('.zip'):
             with zipfile.ZipFile(full, 'r') as zf:
-                zf.extractall(dest_full)
+                for member in zf.infolist():
+                    member_path = os.path.realpath(os.path.join(dest_full, member.filename))
+                    if not member_path.startswith(os.path.realpath(dest_full) + os.sep) and member_path != os.path.realpath(dest_full):
+                        return {"success": False, "error": f"安全限制：压缩包包含非法路径 {member.filename}"}
+                    if member.is_dir():
+                        os.makedirs(member_path, exist_ok=True)
+                    else:
+                        os.makedirs(os.path.dirname(member_path), exist_ok=True)
+                        with zf.open(member) as src, open(member_path, 'wb') as dst:
+                            chunk = 8192
+                            extracted = 0
+                            while True:
+                                data = src.read(chunk)
+                                if not data:
+                                    break
+                                dst.write(data)
+                                extracted += len(data)
+                                total_extracted += len(data)
+                                if total_extracted > MAX_TOTAL_SIZE:
+                                    return {"success": False, "error": "解压失败：文件总大小超过 500MB 限制"}
         elif name_lower.endswith('.tar.gz') or name_lower.endswith('.tgz'):
             with tarfile.open(full, 'r:gz') as tar:
-                tar.extractall(dest_full)
+                for member in tar.getmembers():
+                    member_path = os.path.realpath(os.path.join(dest_full, member.name))
+                    if not member_path.startswith(os.path.realpath(dest_full) + os.sep) and member_path != os.path.realpath(dest_full):
+                        return {"success": False, "error": f"安全限制：压缩包包含非法路径 {member.name}"}
+                    if member.isfile():
+                        member.file_size = getattr(member, 'size', 0)
+                        total_extracted += member.size
+                        if total_extracted > MAX_TOTAL_SIZE:
+                            return {"success": False, "error": "解压失败：文件总大小超过 500MB 限制"}
+                    tar.extract(member, dest_full)
         elif name_lower.endswith('.tar'):
             with tarfile.open(full, 'r') as tar:
-                tar.extractall(dest_full)
+                for member in tar.getmembers():
+                    member_path = os.path.realpath(os.path.join(dest_full, member.name))
+                    if not member_path.startswith(os.path.realpath(dest_full) + os.sep) and member_path != os.path.realpath(dest_full):
+                        return {"success": False, "error": f"安全限制：压缩包包含非法路径 {member.name}"}
+                    if member.isfile():
+                        total_extracted += member.size
+                        if total_extracted > MAX_TOTAL_SIZE:
+                            return {"success": False, "error": "解压失败：文件总大小超过 500MB 限制"}
+                    tar.extract(member, dest_full)
         else:
             return {"success": False, "error": f"不支持的压缩格式: {path}，支持 .zip / .tar.gz / .tar"}
         return {"success": True, "dest_folder": dest_folder, "message": f"解压完成: {dest_folder}"}
@@ -914,7 +1145,7 @@ def count_items(path="", recursive=False):
                 for f in files:
                     try:
                         total_size += os.path.getsize(os.path.join(root, f))
-                    except:
+                    except (IOError, OSError):
                         pass
         else:
             for name in os.listdir(full):
@@ -925,7 +1156,7 @@ def count_items(path="", recursive=False):
                     file_count += 1
                     try:
                         total_size += os.path.getsize(fpath)
-                    except:
+                    except (IOError, OSError):
                         pass
         return {
             "success": True,
@@ -941,6 +1172,23 @@ def count_items(path="", recursive=False):
 
 # ========== 🗄️ 数据库操作（6个） ==========
 
+# 保护的系统表，不允许 DROP/CREATE
+_PROTECTED_TABLES = {'_meta', 'sessions', 'departments', 'users',
+                     'user_sessions', 'audit_log', 'policies', 'leave_requests'}
+_TABLE_NAME_RE = re.compile(r'^[a-zA-Z_][a-zA-Z0-9_]{0,63}$')
+
+
+def _validate_table_name(table_name, allow_protected=False):
+    """校验表名，返回 (valid, error_msg)"""
+    if not table_name:
+        return False, "表名不能为空"
+    if not _TABLE_NAME_RE.match(table_name):
+        return False, f"无效的表名: {table_name}（仅允许字母、数字、下划线，且以字母或下划线开头）"
+    if not allow_protected and table_name in _PROTECTED_TABLES:
+        return False, f"不能操作系统表: {table_name}"
+    return True, None
+
+
 def db_list_tables():
     """列出数据库中所有表"""
     try:
@@ -948,7 +1196,7 @@ def db_list_tables():
         cursor = conn.cursor()
         cursor.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
         tables = [row[0] for row in cursor.fetchall()]
-        conn.close()
+        # conn 由线程本地缓存管理，不关闭
         return {"success": True, "tables": tables, "count": len(tables)}
     except Exception as e:
         return {"success": False, "error": f"列出表失败: {e}"}
@@ -960,9 +1208,22 @@ def db_describe_table(table_name):
     参数:
         table_name: 表名
     """
+    valid, err = _validate_table_name(table_name, allow_protected=True)
+    if not valid:
+        return {"success": False, "error": err}
+    # 先验证表确实存在于数据库中（防止 PRAGMA 注入）
     try:
         conn = _get_db_conn()
         cursor = conn.cursor()
+        exists = cursor.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",
+            (table_name,)
+        ).fetchone()
+        if not exists:
+            # conn 由线程本地缓存管理，不关闭
+            return {"success": False, "error": f"表不存在: {table_name}"}
+        # PRAGMA table_info() 不支持参数化查询，但 table_name 已通过 _validate_table_name
+        # 的严格正则（^[a-zA-Z_][a-zA-Z0-9_]{0,63}$）和表存在性验证
         cursor.execute(f"PRAGMA table_info({table_name})")
         columns = []
         for row in cursor.fetchall():
@@ -974,7 +1235,7 @@ def db_describe_table(table_name):
                 "default": row[4],
                 "primary_key": bool(row[5]),
             })
-        conn.close()
+        # conn 由线程本地缓存管理，不关闭
         return {"success": True, "table": table_name, "columns": columns}
     except Exception as e:
         return {"success": False, "error": f"查看表结构失败: {e}"}
@@ -1010,7 +1271,7 @@ def db_query(sql, params=None, limit=100):
 
         columns = [desc[0] for desc in cursor.description] if cursor.description else []
         result_rows = [dict(row) for row in rows]
-        conn.close()
+        # conn 由线程本地缓存管理，不关闭
 
         return {
             "success": True,
@@ -1045,7 +1306,7 @@ def db_execute(sql, params=None):
             cursor.execute(sql)
         conn.commit()
         affected = cursor.rowcount
-        conn.close()
+        # conn 由线程本地缓存管理，不关闭
         return {"success": True, "affected_rows": affected, "message": f"执行成功，影响 {affected} 行"}
     except Exception as e:
         return {"success": False, "error": f"执行失败: {e}"}
@@ -1064,6 +1325,10 @@ def db_create_table(table_name, columns):
         return {"success": False, "error": "表名和列定义不能为空"}
     if not isinstance(columns, list):
         return {"success": False, "error": "columns 必须是列表"}
+
+    valid, err = _validate_table_name(table_name)
+    if not valid:
+        return {"success": False, "error": err}
 
     col_defs = []
     for col in columns:
@@ -1089,9 +1354,9 @@ def db_drop_table(table_name):
     """
     if not table_name:
         return {"success": False, "error": "表名不能为空"}
-    # 防止误删系统表
-    if table_name == '_meta':
-        return {"success": False, "error": "不能删除系统表 _meta"}
+    valid, err = _validate_table_name(table_name)
+    if not valid:
+        return {"success": False, "error": err}
     sql = f"DROP TABLE IF EXISTS {table_name}"
     return db_execute(sql)
 
@@ -1112,12 +1377,34 @@ def save_uploaded_file(file_data, filename, subfolder=""):
     if not safe_name or safe_name in ('.', '..'):
         return False, {"error": "无效的文件名"}
 
-    target_dir = FILES_DIR
-    if subfolder:
+    # 默认子文件夹：用户角色目录
+    user = getattr(_user_context, 'user', None)
+    if not subfolder and user:
+        user_role = user.get('role', 'guest')
+        subfolder = user_role
+
+    # share/ 路由到 data/share/，其他到 data/files/
+    if subfolder and subfolder.replace('\\', '/').split('/')[0] == 'share':
+        # 去掉 share 前缀，将剩余路径放到 data/share/
+        share_rel = '/'.join(subfolder.replace('\\', '/').split('/')[1:])
+        target_dir = os.path.join(DATA_DIR, 'share', share_rel) if share_rel else os.path.join(DATA_DIR, 'share')
+    elif subfolder:
         target_dir = os.path.join(FILES_DIR, subfolder)
-    os.makedirs(target_dir, exist_ok=True)
+    else:
+        target_dir = FILES_DIR
 
     target_path = os.path.join(target_dir, safe_name)
+    # 安全检查（在创建目录之前完成）
+    full = os.path.realpath(target_path)
+    allowed = _get_allowed_roots()
+    ok = False
+    for root in allowed:
+        if full.startswith(root + os.sep) or full == root:
+            ok = True
+            break
+    if not ok:
+        return False, {"error": f"安全限制：禁止上传到 '{subfolder}'（权限不足）"}
+    os.makedirs(target_dir, exist_ok=True)
     try:
         with open(target_path, 'wb') as f:
             f.write(file_data)

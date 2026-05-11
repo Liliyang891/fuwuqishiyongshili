@@ -1,0 +1,39 @@
+# 技能：我的部门同事
+name: my_dept_colleagues
+description: 查看同部门同事列表
+min_role: staff
+priority: 11
+category: org
+intent_patterns:
+  - (我|我们|本).*(部门|团队).*(有谁|有哪些人|有什么人|同事|成员|同事都有谁)
+  - (同事|同部门|同组|部门同事).*(有哪些|是谁|列表|都有谁)
+  - (查看|显示|列出).*(同|本|我).*(部门|团队).*(同事|成员)
+intent_keywords:
+  - 部门同事
+  - 同事列表
+  - 同部门
+  - 本部门
+  - 团队成员
+handler:
+  type: sql
+  db: users
+  result_mode: list
+  sql: |
+    SELECT u.username,
+      CASE u.role
+        WHEN 'super_admin' THEN '超级管理员'
+        WHEN 'chairman' THEN '董事长'
+        WHEN 'gm' THEN '总经理'
+        WHEN 'dept_head' THEN '部门长'
+        WHEN 'staff' THEN '职员'
+        WHEN 'guest' THEN '游客'
+        ELSE u.role
+      END as role_name,
+      COALESCE(u.email, '未填写') as email
+    FROM users u
+    WHERE u.department_id = {department_id} AND u.is_active = 1
+    ORDER BY u.role DESC, u.username
+  row_template: "  • {username}（{role_name}）"
+  result_template: |
+    你所在部门共有 **{total_count}** 人：
+    {rows}

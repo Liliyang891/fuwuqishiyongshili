@@ -1,0 +1,27 @@
+# 技能：用户/员工数量统计
+name: user_count
+description: 查询注册用户数量和部门数量
+min_role: guest
+priority: 10
+category: stats
+intent_patterns:
+  - (多少|几个|查询|查看|目前|当前|现在|一共).*(人|员工|用户|注册|账号|成员)
+  - (人|员工|用户|注册|账号).*(多少|数量|统计|查询)
+intent_keywords:
+  - 用户数
+  - 员工数
+  - 人数
+  - 用户列表
+  - 员工列表
+handler:
+  type: sql
+  db: users
+  result_mode: single
+  sql: |
+    SELECT
+      (SELECT COUNT(*) FROM users) as total,
+      (SELECT COUNT(*) FROM users WHERE is_active=1) as active,
+      (SELECT COUNT(*) FROM users WHERE is_active=0) as inactive,
+      (SELECT COUNT(*) FROM departments) as depts
+  result_template: |
+    当前系统共有 **{total}** 名注册用户（其中 {active} 人状态正常，{inactive} 人已禁用），共有 **{depts}** 个部门。

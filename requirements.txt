@@ -6,6 +6,7 @@ bcrypt>=4.0
 pytest>=8.0
 paramiko>=3.0
 python-dotenv>=1.0
+pyyaml>=6.0
 
 # === 语音输入（GUI客户端，可选） ===
 # pip install SpeechRecognition pyaudio

@@ -1,0 +1,11 @@
+import requests,urllib3,json,sys,io
+sys.stdout=io.TextIOWrapper(sys.stdout.buffer,encoding='utf-8',errors='replace')
+urllib3.disable_warnings()
+r=requests.get('https://www.hdxt.com/api/status',timeout=15,verify=False)
+print('Status:', r.status_code, r.json())
+s=requests.Session()
+r=s.post('https://www.hdxt.com/api/login',json={'login':'admin','password':'admin123456'},timeout=15,verify=False)
+print('Login:', r.status_code, 'ok=', r.json().get('success'))
+r=s.post('https://www.hdxt.com/api/command',json={'text':'我部门有哪些同事'},timeout=30,verify=False)
+d=r.json()
+print('Skill:', d.get('success'), 'reply_len:', len(d.get('reply','')))

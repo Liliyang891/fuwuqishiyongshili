@@ -1,0 +1,19 @@
+# 技能：我的审批人
+name: my_approver
+description: 查询当前用户的请假审批人是谁
+min_role: staff
+priority: 10
+category: personal
+intent_patterns:
+  - (我|我的).*(审批|审核|上级|领导).*(是谁|是哪个|是谁审批|谁审批|找谁)
+  - (谁|哪个).*(审批|审核|批).*(我|我的)
+  - (审批人|审核人|上级|领导).*(是谁|哪个|是谁审批)
+intent_keywords:
+  - 审批人
+  - 我的审批
+  - 谁审批我
+  - 我的上级
+  - 找谁请假
+handler:
+  type: function
+  function: agent.skill_registry_handlers.get_my_approver

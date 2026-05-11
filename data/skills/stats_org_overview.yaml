@@ -1,0 +1,43 @@
+# 技能：组织架构概览
+name: org_overview
+description: 显示公司管理层人员和架构
+min_role: guest
+priority: 9
+category: org
+intent_patterns:
+  - (组织|公司).*(架构|结构|体系|层级|框架)
+  - (架构|结构).*(图|概览|总览|一览|查看)
+  - (领导|管理|中高层|高层|管理层).*(有哪些|谁|列表|都有谁|人员)
+  - (总经理|董事长|部门长|部门负责人).*(是谁|有哪些)
+intent_keywords:
+  - 组织架构
+  - 管理层
+  - 管理人员
+  - 领导层
+  - 公司架构
+handler:
+  type: sql
+  db: users
+  result_mode: list
+  sql: |
+    SELECT u.username,
+      CASE u.role
+        WHEN 'super_admin' THEN '超级管理员'
+        WHEN 'chairman' THEN '董事长'
+        WHEN 'gm' THEN '总经理'
+        WHEN 'dept_head' THEN '部门长'
+        WHEN 'staff' THEN '职员'
+        WHEN 'guest' THEN '游客'
+        ELSE u.role
+      END as role_name,
+      COALESCE(d.name, '无') as dept_name
+    FROM users u
+    LEFT JOIN departments d ON u.department_id = d.id
+    WHERE u.is_active = 1 AND u.role IN ('super_admin', 'chairman', 'gm', 'dept_head')
+    ORDER BY
+      CASE u.role WHEN 'super_admin' THEN 1 WHEN 'chairman' THEN 2 WHEN 'gm' THEN 3 WHEN 'dept_head' THEN 4 END,
+      d.id
+  row_template: "  • {username} — {role_name} — {dept_name}"
+  result_template: |
+    公司当前管理层人员（共 {total_count} 人）：
+    {rows}

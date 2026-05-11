@@ -41,7 +41,7 @@ class RemoteClient:
         self.root.minsize(450, 400)
         self.root.configure(bg="#1e1e2e")
 
-        self.server_host = tk.StringVar(value="47.250.59.60")
+        self.server_host = tk.StringVar(value="127.0.0.1")
         self.server_port = tk.StringVar(value="8888")
         self.selected_model = None
         self.session_id = ''

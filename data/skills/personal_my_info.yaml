@@ -1,0 +1,11 @@
+# 技能：我的信息
+name: my_info
+description: 查看当前登录用户的个人信息（角色、部门、权限等级）
+min_role: guest
+priority: 10
+category: personal
+intent_patterns:
+  - (我是谁|我的信息|我的角色|我的权限|我的部门|查看我的|个人信息)
+handler:
+  type: function
+  function: agent.skill_registry_handlers.get_my_info

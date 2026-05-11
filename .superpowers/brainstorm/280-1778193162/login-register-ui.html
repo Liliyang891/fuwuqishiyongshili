@@ -1,0 +1,75 @@
+<h2>登录页面设计</h2>
+<p class="subtitle">简洁实用的企业登录页面</p>
+
+<div class="split">
+  <div class="mockup">
+    <div class="mockup-header">登录页面 /login</div>
+    <div class="mockup-body">
+      <div style="text-align:center; padding:20px 0;">
+        <h3 style="margin:0; color:#60a5fa;">HDXT AI 助手</h3>
+        <p style="color:#a0a0c0; font-size:12px; margin:4px 0;">请登录您的账号</p>
+      </div>
+
+      <div style="padding:8px 20px;">
+        <p style="font-size:11px; color:#a0a0c0; margin:8px 0 4px;">用户名或邮箱</p>
+        <div class="mock-input" style="margin:0;">admin</div>
+
+        <p style="font-size:11px; color:#a0a0c0; margin:12px 0 4px;">密码</p>
+        <div class="mock-input" style="margin:0;">········</div>
+
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:12px;">
+          <span style="font-size:11px; color:#a0a0c0;">□ 记住我</span>
+          <span style="font-size:11px; color:#60a5fa;">忘记密码？</span>
+        </div>
+
+        <button class="mock-button" style="width:100%; margin-top:16px; padding:10px;">登  录</button>
+
+        <p style="text-align:center; font-size:12px; color:#a0a0c0; margin-top:16px;">
+          还没有账号？<span style="color:#60a5fa;">立即注册</span>
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <div class="mockup">
+    <div class="mockup-header">注册页面 /register</div>
+    <div class="mockup-body">
+      <div style="text-align:center; padding:16px 0;">
+        <h3 style="margin:0; color:#60a5fa;">创建新账号</h3>
+        <p style="color:#a0a0c0; font-size:12px; margin:4px 0;">注册后默认为游客权限</p>
+      </div>
+
+      <div style="padding:8px 20px;">
+        <p style="font-size:11px; color:#a0a0c0; margin:4px 0;">用户名 *</p>
+        <div class="mock-input" style="margin:0;">zhangsan</div>
+
+        <p style="font-size:11px; color:#a0a0c0; margin:8px 0 4px;">邮箱（选填）</p>
+        <div class="mock-input" style="margin:0;">zhangsan@company.com</div>
+
+        <p style="font-size:11px; color:#a0a0c0; margin:8px 0 4px;">密码 *</p>
+        <div class="mock-input" style="margin:0;">········</div>
+
+        <p style="font-size:11px; color:#a0a0c0; margin:8px 0 4px;">确认密码 *</p>
+        <div class="mock-input" style="margin:0;">········</div>
+
+        <button class="mock-button" style="width:100%; margin-top:12px; padding:10px;">注  册</button>
+
+        <p style="text-align:center; font-size:12px; color:#a0a0c0; margin-top:12px;">
+          已有账号？<span style="color:#60a5fa;">去登录</span>
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>技术要求</h3>
+  <table style="width:100%; font-size:13px;">
+    <tr><td style="padding:5px 10px; width:25%;">密码最小长度</td><td style="padding:5px 10px;">6 位</td></tr>
+    <tr style="background:#1f1040;"><td style="padding:5px 10px;">密码哈希</td><td style="padding:5px 10px;">bcrypt (cost=12)</td></tr>
+    <tr><td style="padding:5px 10px;">用户名规则</td><td style="padding:5px 10px;">3-20 字符，字母数字下划线</td></tr>
+    <tr style="background:#1f1040;"><td style="padding:5px 10px;">记住我</td><td style="padding:5px 10px;">勾选后 session 延长至 7 天</td></tr>
+    <tr><td style="padding:5px 10px;">忘记密码</td><td style="padding:5px 10px;">暂不实现，管理员手动重置</td></tr>
+    <tr style="background:#1f1040;"><td style="padding:5px 10px;">页面形式</td><td style="padding:5px 10px;">独立 HTML 页面（login.html, register.html）</td></tr>
+  </table>
+</div>

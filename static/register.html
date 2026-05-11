@@ -3,50 +3,104 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>注册 - HDXT AI 助手</title>
+<title>注册 — 博爱医药</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
-body { background: #141425; color: #d0d0e0; font-family: "Microsoft YaHei", sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
-.reg-card { background: #1e1e2e; border-radius: 12px; padding: 36px; width: 380px; max-width: 90vw; box-shadow: 0 4px 24px rgba(0,0,0,0.4); }
-.reg-card h2 { text-align: center; color: #60a5fa; margin-bottom: 4px; }
-.reg-card .subtitle { text-align: center; color: #8888aa; font-size: 13px; margin-bottom: 24px; }
-.form-group { margin-bottom: 14px; }
-.form-group label { display: block; font-size: 13px; color: #a0a0c0; margin-bottom: 5px; }
-.form-group label .optional { color: #5a5a7a; }
-.form-group input { width: 100%; padding: 9px 12px; background: #2a2a3e; border: 1px solid #3a3a5e; border-radius: 6px; color: #fff; font-size: 14px; outline: none; }
-.form-group input:focus { border-color: #3b82f6; }
-.form-group input.error { border-color: #ef4444; }
-.btn-register { width: 100%; padding: 12px; background: #3b82f6; color: #fff; border: none; border-radius: 6px; font-size: 15px; font-weight: bold; cursor: pointer; }
-.btn-register:hover { background: #2563eb; }
-.btn-register:disabled { opacity: 0.6; cursor: not-allowed; }
-.error-msg { color: #ef4444; font-size: 13px; text-align: center; margin-top: 10px; min-height: 20px; }
-.login-link { text-align: center; font-size: 13px; color: #a0a0c0; margin-top: 14px; }
-.login-link a { color: #60a5fa; text-decoration: none; }
+:root {
+    --green: #4bb42d;
+    --green-dark: #3a8a22;
+    --green-light: #e8f5e0;
+    --green-pale: #f4faf0;
+    --text: #2d3748;
+    --text-light: #5a6b7a;
+    --white: #ffffff;
+    --border: #e2e8e8;
+}
+body {
+    background: linear-gradient(180deg, #f4faf0 0%, #ffffff 50%, #f9fafb 100%);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    display: flex; justify-content: center; align-items: center;
+    min-height: 100vh; padding: 20px;
+    -webkit-font-smoothing: antialiased;
+}
+.reg-card {
+    background: var(--white);
+    border-radius: 20px; padding: 40px 40px 32px;
+    width: 420px; max-width: 90vw;
+    box-shadow: 0 4px 40px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.04);
+    border: 1px solid var(--border);
+    text-align: center;
+}
+.logo-img { height: 28px; width: auto; margin-bottom: 24px; }
+.reg-card h2 { font-size: 22px; color: #1a3a1a; margin-bottom: 6px; font-weight: 700; }
+.reg-card .subtitle { color: var(--text-light); font-size: 13px; margin-bottom: 22px; }
+.form-group { margin-bottom: 14px; text-align: left; }
+.form-group label { display: block; font-size: 13px; color: var(--text); font-weight: 600; margin-bottom: 5px; }
+.form-group label .optional { color: var(--text-light); font-weight: 400; }
+.form-group input {
+    width: 100%; padding: 10px 14px;
+    background: #f9faf9; border: 1px solid var(--border); border-radius: 10px;
+    color: var(--text); font-size: 14px; outline: none;
+    transition: all 0.2s;
+}
+.form-group input:focus {
+    border-color: var(--green);
+    box-shadow: 0 0 0 3px rgba(75,180,45,0.08);
+    background: #fff;
+}
+.form-group input::placeholder { color: #b0c0b0; }
+.form-group input.error { border-color: #dc2626; }
+.btn-register {
+    width: 100%; padding: 12px; margin-top: 6px;
+    background: linear-gradient(135deg, var(--green), var(--green-dark));
+    color: #fff; border: none; border-radius: 10px;
+    font-size: 15px; font-weight: 600; cursor: pointer;
+    transition: all 0.25s;
+    box-shadow: 0 2px 12px rgba(75,180,45,0.25);
+}
+.btn-register:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 20px rgba(75,180,45,0.35);
+}
+.btn-register:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+.error-msg { color: #dc2626; font-size: 13px; text-align: center; margin-top: 10px; min-height: 20px; }
+.login-link { text-align: center; font-size: 13px; color: var(--text-light); margin-top: 16px; }
+.login-link a { color: var(--green-dark); text-decoration: none; font-weight: 600; }
+.login-link a:hover { color: var(--green); }
+.back-home { display: block; text-align: center; margin-top: 12px; font-size: 12px; color: var(--text-light); text-decoration: none; }
+.back-home:hover { color: var(--green); }
+
+@media (max-width: 480px) {
+    .reg-card { padding: 28px 20px 24px; }
+}
 </style>
 </head>
 <body>
 <div class="reg-card">
+    <img class="logo-img" src="/static/img/logo-text.png" alt="博爱医药">
     <h2>创建新账号</h2>
     <p class="subtitle">注册后默认为游客权限，需管理员提权</p>
     <div class="form-group">
-        <label>用户名 <span style="color:#ef4444;">*</span></label>
-        <input type="text" id="username" placeholder="3-20字符，字母数字下划线" autocomplete="username">
+        <label>用户名 <span style="color:#dc2626;">*</span></label>
+        <input type="text" id="username" placeholder="2-20字符，支持中文、字母、数字、下划线" autocomplete="username">
     </div>
     <div class="form-group">
         <label>邮箱 <span class="optional">(选填)</span></label>
         <input type="email" id="email" placeholder="用于找回密码" autocomplete="email">
     </div>
     <div class="form-group">
-        <label>密码 <span style="color:#ef4444;">*</span></label>
-        <input type="password" id="password" placeholder="至少6位" autocomplete="new-password">
+        <label>密码 <span style="color:#dc2626;">*</span></label>
+        <input type="password" id="password" placeholder="至少8位纯数字" autocomplete="new-password">
     </div>
     <div class="form-group">
-        <label>确认密码 <span style="color:#ef4444;">*</span></label>
+        <label>确认密码 <span style="color:#dc2626;">*</span></label>
         <input type="password" id="confirm" placeholder="再次输入密码" autocomplete="new-password">
     </div>
     <button class="btn-register" id="btnReg" onclick="doRegister()">注  册</button>
     <div class="error-msg" id="error"></div>
     <div class="login-link">已有账号？<a href="/login">去登录</a></div>
+    <a class="back-home" href="/">← 返回首页</a>
 </div>
 <script>
 async function doRegister() {
@@ -57,11 +111,11 @@ async function doRegister() {
     const errorEl = document.getElementById('error');
     const btn = document.getElementById('btnReg');
 
-    if (!/^[a-zA-Z0-9_]{3,20}$/.test(username)) {
-        errorEl.textContent = '用户名需要3-20个字符（字母数字下划线）'; return;
+    if (!/^[一-鿿a-zA-Z0-9_]{2,20}$/.test(username)) {
+        errorEl.textContent = '用户名需要2-20个字符（支持中文、字母、数字、下划线）'; return;
     }
-    if (password.length < 6) {
-        errorEl.textContent = '密码至少需要6个字符'; return;
+    if (password.length < 8 || !/^\d+$/.test(password)) {
+        errorEl.textContent = '密码需要至少8位纯数字'; return;
     }
     if (password !== confirm) {
         errorEl.textContent = '两次密码输入不一致'; return;
@@ -89,7 +143,8 @@ async function doRegister() {
             errorEl.textContent = data.error || '注册失败';
         }
     } catch (e) {
-        errorEl.textContent = '网络错误，请检查连接';
+        console.error('Register error:', e);
+	        errorEl.textContent = '请求失败：' + (e.message || '网络错误，请检查连接');
     } finally {
         btn.disabled = false; btn.textContent = '注  册';
     }

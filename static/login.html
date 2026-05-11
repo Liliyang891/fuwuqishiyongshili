@@ -3,49 +3,88 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>登录 - HDXT AI 助手</title>
+<title>登录 — 博爱医药</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
+:root {
+    --green: #4bb42d;
+    --green-dark: #3a8a22;
+    --green-light: #e8f5e0;
+    --green-pale: #f4faf0;
+    --text: #2d3748;
+    --text-light: #5a6b7a;
+    --white: #ffffff;
+    --border: #e2e8e8;
+}
 body {
-    background: #141425; color: #d0d0e0;
-    font-family: "Microsoft YaHei", sans-serif;
+    background: linear-gradient(180deg, #f4faf0 0%, #ffffff 50%, #f9fafb 100%);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
     display: flex; justify-content: center; align-items: center;
-    min-height: 100vh;
+    min-height: 100vh; padding: 20px;
+    -webkit-font-smoothing: antialiased;
 }
 .login-card {
-    background: #1e1e2e; border-radius: 12px; padding: 40px;
-    width: 380px; max-width: 90vw;
-    box-shadow: 0 4px 24px rgba(0,0,0,0.4);
+    background: var(--white);
+    border-radius: 20px; padding: 44px 40px 36px;
+    width: 400px; max-width: 90vw;
+    box-shadow: 0 4px 40px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.04);
+    border: 1px solid var(--border);
+    text-align: center;
 }
-.login-card h2 { text-align: center; color: #60a5fa; margin-bottom: 4px; }
-.login-card .subtitle { text-align: center; color: #8888aa; font-size: 13px; margin-bottom: 28px; }
-.form-group { margin-bottom: 18px; }
-.form-group label { display: block; font-size: 13px; color: #a0a0c0; margin-bottom: 6px; }
+.logo-img { height: 32px; width: auto; margin-bottom: 28px; }
+.login-card h2 { font-size: 22px; color: #1a3a1a; margin-bottom: 6px; font-weight: 700; }
+.login-card .subtitle { color: var(--text-light); font-size: 13px; margin-bottom: 28px; }
+.form-group { margin-bottom: 16px; text-align: left; }
+.form-group label { display: block; font-size: 13px; color: var(--text); font-weight: 600; margin-bottom: 6px; }
 .form-group input {
-    width: 100%; padding: 10px 12px;
-    background: #2a2a3e; border: 1px solid #3a3a5e; border-radius: 6px;
-    color: #fff; font-size: 14px; outline: none; transition: border-color 0.2s;
+    width: 100%; padding: 11px 14px;
+    background: #f9faf9; border: 1px solid var(--border); border-radius: 10px;
+    color: var(--text); font-size: 14px; outline: none;
+    transition: all 0.2s;
 }
-.form-group input:focus { border-color: #3b82f6; }
-.remember-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; font-size: 13px; }
-.remember-row label { color: #a0a0c0; cursor: pointer; }
-.remember-row a { color: #60a5fa; text-decoration: none; }
+.form-group input:focus {
+    border-color: var(--green);
+    box-shadow: 0 0 0 3px rgba(75,180,45,0.08);
+    background: #fff;
+}
+.form-group input::placeholder { color: #b0c0b0; }
+.remember-row {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 22px; font-size: 13px;
+}
+.remember-row label { color: var(--text-light); cursor: pointer; }
+.remember-row a { color: var(--green); text-decoration: none; font-weight: 500; }
 .btn-login {
-    width: 100%; padding: 12px; background: #3b82f6; color: #fff;
-    border: none; border-radius: 6px; font-size: 15px; font-weight: bold;
-    cursor: pointer; transition: background 0.2s;
+    width: 100%; padding: 12px;
+    background: linear-gradient(135deg, var(--green), var(--green-dark));
+    color: #fff; border: none; border-radius: 10px;
+    font-size: 15px; font-weight: 600; cursor: pointer;
+    transition: all 0.25s;
+    box-shadow: 0 2px 12px rgba(75,180,45,0.25);
 }
-.btn-login:hover { background: #2563eb; }
-.btn-login:disabled { opacity: 0.6; cursor: not-allowed; }
-.error-msg { color: #ef4444; font-size: 13px; text-align: center; margin-top: 12px; min-height: 20px; }
-.register-link { text-align: center; font-size: 13px; color: #a0a0c0; margin-top: 16px; }
-.register-link a { color: #60a5fa; text-decoration: none; }
+.btn-login:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 20px rgba(75,180,45,0.35);
+}
+.btn-login:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+.error-msg { color: #dc2626; font-size: 13px; text-align: center; margin-top: 12px; min-height: 20px; }
+.register-link { text-align: center; font-size: 13px; color: var(--text-light); margin-top: 18px; }
+.register-link a { color: var(--green-dark); text-decoration: none; font-weight: 600; }
+.register-link a:hover { color: var(--green); }
+.back-home { display: block; text-align: center; margin-top: 14px; font-size: 12px; color: var(--text-light); text-decoration: none; }
+.back-home:hover { color: var(--green); }
+
+@media (max-width: 480px) {
+    .login-card { padding: 32px 24px 28px; }
+}
 </style>
 </head>
 <body>
 <div class="login-card">
-    <h2>HDXT AI 助手</h2>
-    <p class="subtitle">请登录您的账号</p>
+    <img class="logo-img" src="/static/img/logo-text.png" alt="博爱医药">
+    <h2>登录</h2>
+    <p class="subtitle">登录博爱医药 AI 管理平台</p>
     <div class="form-group">
         <label>用户名或邮箱</label>
         <input type="text" id="login" placeholder="请输入用户名或邮箱" autocomplete="username">
@@ -60,6 +99,7 @@ body {
     <button class="btn-login" id="btnLogin" onclick="doLogin()">登  录</button>
     <div class="error-msg" id="error"></div>
     <div class="register-link">还没有账号？<a href="/register">立即注册</a></div>
+    <a class="back-home" href="/">← 返回首页</a>
 </div>
 <script>
 async function doLogin() {
@@ -73,9 +113,7 @@ async function doLogin() {
         errorEl.textContent = '请输入用户名和密码';
         return;
     }
-    btn.disabled = true;
-    btn.textContent = '登录中...';
-    errorEl.textContent = '';
+    btn.disabled = true; btn.textContent = '登录中...'; errorEl.textContent = '';
 
     try {
         const resp = await fetch('/api/login', {
@@ -90,10 +128,10 @@ async function doLogin() {
             errorEl.textContent = data.error || '登录失败';
         }
     } catch (e) {
-        errorEl.textContent = '网络错误，请检查连接';
+        console.error('Login error:', e);
+	        errorEl.textContent = '请求失败：' + (e.message || '网络错误，请检查连接');
     } finally {
-        btn.disabled = false;
-        btn.textContent = '登  录';
+        btn.disabled = false; btn.textContent = '登  录';
     }
 }
 

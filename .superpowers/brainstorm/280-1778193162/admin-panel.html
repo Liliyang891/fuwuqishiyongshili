@@ -1,0 +1,127 @@
+<h2>管理后台设计</h2>
+<p class="subtitle">仅超级管理员可访问的后台管理系统</p>
+
+<div class="section">
+  <h3>管理后台总览 /admin/</h3>
+  <div class="mockup">
+    <div class="mockup-header">管理后台 — 仪表盘</div>
+    <div class="mockup-body">
+      <div style="display:flex;">
+        <div class="mock-sidebar" style="width:160px; min-height:240px;">
+          <div style="padding:8px; color:#fbbf24; font-weight:bold; font-size:13px;">管理菜单</div>
+          <div style="padding:6px 8px; background:#3b82f6; color:white; font-size:12px; border-radius:4px; margin:4px 0;">用户管理</div>
+          <div style="padding:6px 8px; color:#a0a0c0; font-size:12px;">部门管理</div>
+          <div style="padding:6px 8px; color:#a0a0c0; font-size:12px;">审计日志</div>
+          <div style="padding:6px 8px; color:#a0a0c0; font-size:12px;">系统设置</div>
+          <div style="margin-top:20px; padding:6px 8px; color:#ef4444; font-size:11px;">退出管理</div>
+        </div>
+        <div class="mock-content" style="flex:1; padding:12px;">
+          <h4 style="margin:0 0 8px 0; font-size:14px;">用户列表</h4>
+          <table style="width:100%; font-size:11px; border-collapse:collapse;">
+            <tr style="background:#1a1a3e;">
+              <th style="padding:5px 6px; text-align:left;">用户名</th>
+              <th style="padding:5px 6px; text-align:left;">邮箱</th>
+              <th style="padding:5px 6px; text-align:left;">角色</th>
+              <th style="padding:5px 6px; text-align:left;">部门</th>
+              <th style="padding:5px 6px; text-align:left;">状态</th>
+              <th style="padding:5px 6px; text-align:left;">操作</th>
+            </tr>
+            <tr>
+              <td style="padding:4px 6px;">admin</td>
+              <td style="padding:4px 6px;color:#a0a0c0;">-</td>
+              <td style="padding:4px 6px;color:#fbbf24;">超级管理员</td>
+              <td style="padding:4px 6px;color:#a0a0c0;">-</td>
+              <td style="padding:4px 6px;color:#4ade80;">正常</td>
+              <td style="padding:4px 6px;"><span style="color:#60a5fa; cursor:pointer;">编辑</span> <span style="color:#ef4444; cursor:pointer;">禁用</span></td>
+            </tr>
+            <tr style="background:#1f1040;">
+              <td style="padding:4px 6px;">zhangsan</td>
+              <td style="padding:4px 6px;">z@co.com</td>
+              <td style="padding:4px 6px;color:#34d399;">部门长</td>
+              <td style="padding:4px 6px;">技术部</td>
+              <td style="padding:4px 6px;color:#4ade80;">正常</td>
+              <td style="padding:4px 6px;"><span style="color:#60a5fa; cursor:pointer;">编辑</span> <span style="color:#ef4444; cursor:pointer;">禁用</span></td>
+            </tr>
+            <tr>
+              <td style="padding:4px 6px;">lisi</td>
+              <td style="padding:4px 6px;">l@co.com</td>
+              <td style="padding:4px 6px;color:#a78bfa;">职员</td>
+              <td style="padding:4px 6px;">技术部</td>
+              <td style="padding:4px 6px;color:#4ade80;">正常</td>
+              <td style="padding:4px 6px;"><span style="color:#60a5fa; cursor:pointer;">编辑</span> <span style="color:#ef4444; cursor:pointer;">禁用</span></td>
+            </tr>
+            <tr style="background:#1f1040;">
+              <td style="padding:4px 6px;">wangwu</td>
+              <td style="padding:4px 6px;">w@co.com</td>
+              <td style="padding:4px 6px;color:#6b7280;">游客</td>
+              <td style="padding:4px 6px;color:#a0a0c0;">-</td>
+              <td style="padding:4px 6px;color:#ef4444;">已禁用</td>
+              <td style="padding:4px 6px;"><span style="color:#60a5fa; cursor:pointer;">编辑</span> <span style="color:#4ade80; cursor:pointer;">启用</span></td>
+            </tr>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>三个管理模块</h3>
+  <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px;">
+    <div style="background:#141425; padding:12px; border-radius:8px; border-left:3px solid #3b82f6;">
+      <h4>用户管理</h4>
+      <p style="font-size:12px; color:#a0a0c0; margin:0;">
+        • 查看所有用户列表<br>
+        • 筛选：按角色/部门/状态<br>
+        • 编辑用户：修改角色和部门<br>
+        • 启用/禁用账号<br>
+        • 手动重置密码<br>
+        • 删除用户（危险操作）
+      </p>
+    </div>
+    <div style="background:#141425; padding:12px; border-radius:8px; border-left:3px solid #4ade80;">
+      <h4>部门管理</h4>
+      <p style="font-size:12px; color:#a0a0c0; margin:0;">
+        • 查看部门列表<br>
+        • 新增部门<br>
+        • 修改部门名称<br>
+        • 删除部门（需无用户归属）<br>
+        • 查看各部门人数统计
+      </p>
+    </div>
+    <div style="background:#141425; padding:12px; border-radius:8px; border-left:3px solid #fbbf24;">
+      <h4>审计日志</h4>
+      <p style="font-size:12px; color:#a0a0c0; margin:0;">
+        • 查看所有危险操作记录<br>
+        • 筛选：按操作类型/用户/时间<br>
+        • 记录：删除文件、DB DELETE<br>
+        DROP TABLE、权限变更等<br>
+        • 不可删除日志
+      </p>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>新增 API 路由（全部仅超级管理员）</h3>
+  <table style="width:100%; border-collapse:collapse; font-size:12px;">
+    <thead>
+      <tr style="background:#1a1a3e;">
+        <th style="padding:6px 8px; border-bottom:2px solid #3b82f6;">方法</th>
+        <th style="padding:6px 8px; border-bottom:2px solid #3b82f6;">路由</th>
+        <th style="padding:6px 8px; border-bottom:2px solid #3b82f6;">说明</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td style="padding:4px 6px;color:#4ade80;">GET</td><td style="padding:4px 6px;">/api/admin/users</td><td style="padding:4px 6px;">用户列表（支持筛选参数）</td></tr>
+      <tr style="background:#1f1040;"><td style="padding:4px 6px;color:#fbbf24;">PUT</td><td style="padding:4px 6px;">/api/admin/users/{id}</td><td style="padding:4px 6px;">修改用户角色/部门/状态</td></tr>
+      <tr><td style="padding:4px 6px;color:#fbbf24;">POST</td><td style="padding:4px 6px;">/api/admin/users/{id}/reset-password</td><td style="padding:4px 6px;">重置用户密码</td></tr>
+      <tr style="background:#1f1040;"><td style="padding:4px 6px;color:#ef4444;">DELETE</td><td style="padding:4px 6px;">/api/admin/users/{id}</td><td style="padding:4px 6px;">删除用户</td></tr>
+      <tr><td style="padding:4px 6px;color:#4ade80;">GET</td><td style="padding:4px 6px;">/api/admin/departments</td><td style="padding:4px 6px;">部门列表</td></tr>
+      <tr style="background:#1f1040;"><td style="padding:4px 6px;color:#4ade80;">POST</td><td style="padding:4px 6px;">/api/admin/departments</td><td style="padding:4px 6px;">新增部门</td></tr>
+      <tr><td style="padding:4px 6px;color:#fbbf24;">PUT</td><td style="padding:4px 6px;">/api/admin/departments/{id}</td><td style="padding:4px 6px;">修改部门名称</td></tr>
+      <tr style="background:#1f1040;"><td style="padding:4px 6px;color:#ef4444;">DELETE</td><td style="padding:4px 6px;">/api/admin/departments/{id}</td><td style="padding:4px 6px;">删除部门（需无用户）</td></tr>
+      <tr><td style="padding:4px 6px;color:#4ade80;">GET</td><td style="padding:4px 6px;">/api/admin/audit-logs</td><td style="padding:4px 6px;">审计日志列表（支持筛选）</td></tr>
+    </tbody>
+  </table>
+</div>

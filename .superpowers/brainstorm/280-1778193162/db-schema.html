@@ -1,0 +1,76 @@
+<h2>数据库表结构设计</h2>
+<p class="subtitle">在现有 data/app.db 中新增 3 张表</p>
+
+<div class="section">
+  <h3>users — 用户表</h3>
+  <table style="width:100%; border-collapse:collapse; font-size:13px;">
+    <thead>
+      <tr style="background:#1a1a3e;">
+        <th style="padding:8px 10px; border-bottom:2px solid #3b82f6;">字段</th>
+        <th style="padding:8px 10px; border-bottom:2px solid #3b82f6;">类型</th>
+        <th style="padding:8px 10px; border-bottom:2px solid #3b82f6;">说明</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td style="padding:6px 10px;color:#fbbf24;">id</td><td style="padding:6px 10px;">INTEGER</td><td style="padding:6px 10px;">主键自增</td></tr>
+      <tr style="background:#1f1040;"><td style="padding:6px 10px;color:#fbbf24;">username</td><td style="padding:6px 10px;">TEXT UNIQUE NOT NULL</td><td style="padding:6px 10px;">用户名</td></tr>
+      <tr><td style="padding:6px 10px;">email</td><td style="padding:6px 10px;">TEXT UNIQUE</td><td style="padding:6px 10px;">邮箱（可选）</td></tr>
+      <tr style="background:#1f1040;"><td style="padding:6px 10px;color:#fbbf24;">password_hash</td><td style="padding:6px 10px;">TEXT NOT NULL</td><td style="padding:6px 10px;">bcrypt 哈希</td></tr>
+      <tr><td style="padding:6px 10px;color:#fbbf24;">role</td><td style="padding:6px 10px;">TEXT NOT NULL DEFAULT 'guest'</td><td style="padding:6px 10px;">角色：super_admin/chairman/gm/dept_head/staff/guest</td></tr>
+      <tr style="background:#1f1040;"><td style="padding:6px 10px;">department_id</td><td style="padding:6px 10px;">INTEGER</td><td style="padding:6px 10px;">所属部门 ID（游客/null 无部门）</td></tr>
+      <tr><td style="padding:6px 10px;">is_active</td><td style="padding:6px 10px;">INTEGER DEFAULT 1</td><td style="padding:6px 10px;">账号是否启用</td></tr>
+      <tr style="background:#1f1040;"><td style="padding:6px 10px;">created_at</td><td style="padding:6px 10px;">REAL</td><td style="padding:6px 10px;">注册时间戳</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="section">
+  <h3>departments — 部门表</h3>
+  <table style="width:100%; border-collapse:collapse; font-size:13px;">
+    <thead>
+      <tr style="background:#1a1a3e;">
+        <th style="padding:8px 10px; border-bottom:2px solid #3b82f6;">字段</th>
+        <th style="padding:8px 10px; border-bottom:2px solid #3b82f6;">类型</th>
+        <th style="padding:8px 10px; border-bottom:2px solid #3b82f6;">说明</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td style="padding:6px 10px;color:#fbbf24;">id</td><td style="padding:6px 10px;">INTEGER</td><td style="padding:6px 10px;">主键自增</td></tr>
+      <tr style="background:#1f1040;"><td style="padding:6px 10px;color:#fbbf24;">name</td><td style="padding:6px 10px;">TEXT UNIQUE NOT NULL</td><td style="padding:6px 10px;">部门名称</td></tr>
+      <tr><td style="padding:6px 10px;">created_at</td><td style="padding:6px 10px;">REAL</td><td style="padding:6px 10px;">创建时间戳</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="section">
+  <h3>user_sessions — 登录会话表</h3>
+  <table style="width:100%; border-collapse:collapse; font-size:13px;">
+    <thead>
+      <tr style="background:#1a1a3e;">
+        <th style="padding:8px 10px; border-bottom:2px solid #3b82f6;">字段</th>
+        <th style="padding:8px 10px; border-bottom:2px solid #3b82f6;">类型</th>
+        <th style="padding:8px 10px; border-bottom:2px solid #3b82f6;">说明</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td style="padding:6px 10px;color:#fbbf24;">token</td><td style="padding:6px 10px;">TEXT PRIMARY KEY</td><td style="padding:6px 10px;">UUID 随机令牌</td></tr>
+      <tr style="background:#1f1040;"><td style="padding:6px 10px;color:#fbbf24;">user_id</td><td style="padding:6px 10px;">INTEGER NOT NULL</td><td style="padding:6px 10px;">关联用户 ID</td></tr>
+      <tr><td style="padding:6px 10px;">created_at</td><td style="padding:6px 10px;">REAL</td><td style="padding:6px 10px;">登录时间戳</td></tr>
+      <tr style="background:#1f1040;"><td style="padding:6px 10px;">expires_at</td><td style="padding:6px 10px;">REAL</td><td style="padding:6px 10px;">过期时间戳（默认 24 小时）</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="section">
+  <div class="pros-cons">
+    <div class="pros"><h4>设计要点</h4>
+      <ul>
+        <li>密码使用 bcrypt 哈希存储</li>
+        <li>user_sessions 与现有 sessions 表（chat 会话）独立</li>
+        <li>session token 通过 httpOnly + Secure Cookie 传递</li>
+        <li>游客注册时 role='guest', department_id=null</li>
+        <li>用户-部门 多对一关系</li>
+      </ul>
+    </div>
+  </div>
+</div>

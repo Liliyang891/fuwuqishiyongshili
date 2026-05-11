@@ -21,6 +21,7 @@ LOCAL_FILES = [
     'web_server.py',
     'tools.py',
     'auth.py',
+    'role_levels.py',
     '.env',
     'gui_client.py',
     'requirements.txt',
@@ -29,6 +30,8 @@ LOCAL_FILES = [
 
 LOCAL_DIRS = [
     'static',
+    'agent',
+    'data/skills',
 ]
 
 
@@ -126,9 +129,12 @@ def deploy():
             print("构建信息:", build_err)
 
         print("\n=== 启动 Docker 容器 ===")
+        # 创建数据目录并设置权限
+        ssh.exec_command(f'mkdir -p {REMOTE_DIR}/data/files')
         stdin, stdout, stderr = ssh.exec_command(
             f'docker run -d --name ai-server --restart unless-stopped '
-            f'-p 8888:8888 --env-file {REMOTE_DIR}/.env ai-server'
+            f'-p 8888:8888 --env-file {REMOTE_DIR}/.env '
+            f'-v {REMOTE_DIR}/data:/app/data ai-server'
         )
         run_out = stdout.read().decode().strip()
         run_err = stderr.read().decode().strip()

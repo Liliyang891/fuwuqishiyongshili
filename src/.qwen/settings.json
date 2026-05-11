@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(e:\\yang\\AIvscode\\openclaude\\src-claudecode/**)"
+    ]
+  },
+  "$version": 3
+}

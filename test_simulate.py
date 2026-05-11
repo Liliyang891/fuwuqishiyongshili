@@ -7,9 +7,13 @@
 
 import sys
 import os
+import io
 import json
 import shutil
 import time
+
+# Fix Windows GBK encoding for emoji output
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
 
 # 确保 data 目录干净
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -19,8 +23,15 @@ DB_PATH = os.path.join(DATA_DIR, 'app.db')
 
 def cleanup():
     """清理测试数据"""
+    import gc
+    gc.collect()
     if os.path.exists(DATA_DIR):
-        shutil.rmtree(DATA_DIR)
+        for _ in range(5):
+            try:
+                shutil.rmtree(DATA_DIR)
+                break
+            except PermissionError:
+                time.sleep(0.3)
     print("🧹 已清理 data 目录")
 
 def setup():
@@ -231,49 +242,49 @@ def test_database(tools):
         {"name": "email", "type": "TEXT", "constraints": "UNIQUE"},
         {"name": "age", "type": "INTEGER", "constraints": "DEFAULT 0"},
     ]
-    r = tools.db_create_table("users", columns)
-    check("创建 users 表", r.get("success"), r.get("message"))
+    r = tools.db_create_table("simtest_users", columns)
+    check("创建 simtest_users 表", r.get("success"), r.get("message"))
 
     # 5.3 查看表结构
-    r = tools.db_describe_table("users")
+    r = tools.db_describe_table("simtest_users")
     check("查看表结构", r.get("success") and len(r.get("columns")) == 4, f"共 {len(r.get('columns', []))} 列")
 
     # 5.4 插入数据
-    r = tools.db_execute("INSERT INTO users (name, email, age) VALUES (?, ?, ?)", ["Alice", "alice@test.com", 25])
+    r = tools.db_execute("INSERT INTO simtest_users (name, email, age) VALUES (?, ?, ?)", ["Alice", "alice@test.com", 25])
     check("插入Alice", r.get("success"), f"影响 {r.get('affected_rows')} 行")
 
-    r = tools.db_execute("INSERT INTO users (name, email, age) VALUES (?, ?, ?)", ["Bob", "bob@test.com", 30])
+    r = tools.db_execute("INSERT INTO simtest_users (name, email, age) VALUES (?, ?, ?)", ["Bob", "bob@test.com", 30])
     check("插入Bob", r.get("success"))
 
-    r = tools.db_execute("INSERT INTO users (name, email, age) VALUES (?, ?, ?)", ["Charlie", "charlie@test.com", 28])
+    r = tools.db_execute("INSERT INTO simtest_users (name, email, age) VALUES (?, ?, ?)", ["Charlie", "charlie@test.com", 28])
     check("插入Charlie", r.get("success"))
 
     # 5.5 查询所有
-    r = tools.db_query("SELECT * FROM users")
+    r = tools.db_query("SELECT * FROM simtest_users")
     check("查询全部用户", r.get("success") and r.get("total") == 3, f"共 {r.get('total')} 条")
 
     # 5.6 条件查询
-    r = tools.db_query("SELECT * FROM users WHERE age > ?", [25])
+    r = tools.db_query("SELECT * FROM simtest_users WHERE age > ?", [25])
     check("查询年龄>25", r.get("success") and r.get("total") == 2, f"共 {r.get('total')} 条")
 
     # 5.7 分页查询
-    r = tools.db_query("SELECT * FROM users ORDER BY id", limit=2)
+    r = tools.db_query("SELECT * FROM simtest_users ORDER BY id", limit=2)
     check("分页查询前2条", r.get("success") and r.get("displayed") == 2 and r.get("truncated"))
 
     # 5.8 更新数据
-    r = tools.db_execute("UPDATE users SET age = ? WHERE name = ?", [26, "Alice"])
+    r = tools.db_execute("UPDATE simtest_users SET age = ? WHERE name = ?", [26, "Alice"])
     check("更新Alice年龄", r.get("success"), f"影响 {r.get('affected_rows')} 行")
-    r = tools.db_query("SELECT age FROM users WHERE name = ?", ["Alice"])
+    r = tools.db_query("SELECT age FROM simtest_users WHERE name = ?", ["Alice"])
     check("年龄是否更新为26", r.get("rows", [{}])[0].get("age") == 26)
 
     # 5.9 删除数据
-    r = tools.db_execute("DELETE FROM users WHERE name = ?", ["Charlie"])
+    r = tools.db_execute("DELETE FROM simtest_users WHERE name = ?", ["Charlie"])
     check("删除Charlie", r.get("success"))
-    r = tools.db_query("SELECT COUNT(*) as cnt FROM users")
+    r = tools.db_query("SELECT COUNT(*) as cnt FROM simtest_users")
     check("删除后还剩2条", r.get("rows", [{}])[0].get("cnt") == 2)
 
     # 5.10 安全：禁止 SELECT 通过 db_execute
-    r = tools.db_execute("SELECT * FROM users")
+    r = tools.db_execute("SELECT * FROM simtest_users")
     check("db_execute 禁止 SELECT", not r.get("success"))
 
     # 5.11 安全：禁止 _meta 表删除
@@ -281,10 +292,10 @@ def test_database(tools):
     check("禁止删除 _meta 表", not r.get("success"))
 
     # 5.12 删除表
-    r = tools.db_drop_table("users")
-    check("删除 users 表", r.get("success"))
+    r = tools.db_drop_table("simtest_users")
+    check("删除 simtest_users 表", r.get("success"))
     r = tools.db_list_tables()
-    check("users表已删除", "users" not in r.get("tables", []))
+    check("simtest_users表已删除", "simtest_users" not in r.get("tables", []))
 
 # ========== 测试 6: 文件上传 ==========
 def test_upload(tools):

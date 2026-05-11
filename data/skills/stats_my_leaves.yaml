@@ -1,0 +1,38 @@
+# 技能：我的请假记录
+name: my_leaves
+description: 查看当前用户的请假记录
+min_role: staff
+priority: 10
+category: leave
+intent_patterns:
+  - (我的|我).*(请假|休假|调休|年假|病假|事假).*(记录|历史|情况|统计|次数|查询)
+  - (请假|休假|调休|年假|病假|事假).*(我的|我).*(记录|历史|情况|查询)
+  - (查看|查询|显示).*(请假|休假).*(记录|历史)
+intent_keywords:
+  - 请假记录
+  - 我的请假
+  - 休假记录
+  - 请假历史
+handler:
+  type: sql
+  db: app
+  result_mode: list
+  sql: |
+    SELECT
+      CASE lr.status
+        WHEN 'pending' THEN '待审批'
+        WHEN 'approved' THEN '已批准'
+        WHEN 'rejected' THEN '已拒绝'
+        ELSE lr.status
+      END as status_name,
+      lr.days, lr.reason, lr.approver_role, lr.approver_name,
+      datetime(lr.created_at, 'unixepoch', 'localtime') as created_date,
+      CASE WHEN lr.resolved_at THEN datetime(lr.resolved_at, 'unixepoch', 'localtime') ELSE '—' END as resolved_date
+    FROM leave_requests lr
+    WHERE lr.applicant_id = {id}
+    ORDER BY lr.created_at DESC
+    LIMIT 10
+  row_template: "  • {created_date} | {days}天 | {reason} | {status_name} | 审批: {approver_name}"
+  result_template: |
+    你最近 {total_count} 条请假记录：
+    {rows}

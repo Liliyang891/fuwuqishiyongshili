@@ -1,0 +1,33 @@
+# 技能：生效中的管理制度
+name: active_policies
+description: 查看当前生效的制度/政策列表
+min_role: guest
+priority: 9
+category: policy
+intent_patterns:
+  - (有哪些|查看|查询|显示|列出).*(制度|政策|规定|规章)
+  - (制度|政策|规定|规章).*(有哪些|列表|查看|查询)
+  - (公司|企业).*(规定|制度|政策)
+intent_keywords:
+  - 制度
+  - 政策
+  - 规定
+  - 规章制度
+  - 公司制度
+handler:
+  type: sql
+  db: app
+  result_mode: list
+  sql: |
+    SELECT name, type,
+      CASE WHEN scope = 'all' THEN '全员适用' ELSE scope END as scope_name,
+      creator_name,
+      datetime(created_at, 'unixepoch', 'localtime') as created_date
+    FROM policies
+    WHERE is_active = 1
+    ORDER BY type, created_at DESC
+    LIMIT 30
+  row_template: "  • [{type}] {name} — {scope_name} | 创建人: {creator_name}"
+  result_template: |
+    当前生效中的制度政策共 **{total_count}** 条：
+    {rows}

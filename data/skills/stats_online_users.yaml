@@ -1,0 +1,16 @@
+# 技能：在线用户
+name: online_users
+description: 查询当前在线的活跃会话
+min_role: guest
+priority: 10
+category: stats
+intent_patterns:
+  - (在线|活跃|登录).*(用户|人|员工|会话)
+  - (谁|哪些|多少).*(在线|登录)
+intent_keywords:
+  - 在线用户
+  - 在线人数
+  - 谁在线
+handler:
+  type: function
+  function: agent.skill_registry_handlers.get_online_users

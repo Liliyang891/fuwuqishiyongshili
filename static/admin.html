@@ -178,8 +178,8 @@ async function toggleUser() {
 }
 
 async function resetPwd(id) {
-    const newPw = prompt('输入新密码（至少6位）：');
-    if (!newPw || newPw.length < 6) { alert('密码至少6位'); return; }
+    const newPw = prompt('输入新密码（至少8位纯数字）：');
+    if (!newPw || newPw.length < 8 || !/^\d+$/.test(newPw)) { alert('密码需要至少8位纯数字'); return; }
     await api('/api/admin/users/reset-password', 'POST', { user_id: id, new_password: newPw });
     alert('密码已重置为：' + newPw);
 }

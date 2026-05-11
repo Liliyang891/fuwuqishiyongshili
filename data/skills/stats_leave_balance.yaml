@@ -1,0 +1,36 @@
+# 技能：我的请假统计
+name: leave_balance
+description: 查看个人请假统计（已批/待批/已拒天数）
+min_role: staff
+priority: 10
+category: leave
+intent_patterns:
+  - (我|我的|个人).*(请假|休假|调休).*(统计|汇总|总共|一共|多少天|多少次|概况)
+  - (请假|休假|调休).*(统计|汇总|一共|总共|概况|情况)
+  - (查看|显示|查).*(请假|休假).*(统计|汇总|情况)
+intent_keywords:
+  - 请假统计
+  - 请假汇总
+  - 休假统计
+  - 请假天数
+handler:
+  type: sql
+  db: app
+  result_mode: single
+  sql: |
+    SELECT
+      COALESCE(SUM(days), 0) as total_days,
+      COALESCE(SUM(CASE WHEN status='approved' THEN days ELSE 0 END), 0) as approved_days,
+      COALESCE(SUM(CASE WHEN status='pending' THEN days ELSE 0 END), 0) as pending_days,
+      COALESCE(SUM(CASE WHEN status='rejected' THEN days ELSE 0 END), 0) as rejected_days,
+      COUNT(*) as total_count,
+      COALESCE(SUM(CASE WHEN status='approved' THEN 1 ELSE 0 END), 0) as approved_count,
+      COALESCE(SUM(CASE WHEN status='pending' THEN 1 ELSE 0 END), 0) as pending_count,
+      COALESCE(SUM(CASE WHEN status='rejected' THEN 1 ELSE 0 END), 0) as rejected_count
+    FROM leave_requests WHERE applicant_id = {id}
+  result_template: |
+    你的请假统计：
+    • 总申请：{total_count} 次，合计 {total_days} 天
+    • 已批准：{approved_count} 次（{approved_days} 天）
+    • 待审批：{pending_count} 次（{pending_days} 天）
+    • 已拒绝：{rejected_count} 次（{rejected_days} 天）

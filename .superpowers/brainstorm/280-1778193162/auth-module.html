@@ -1,0 +1,94 @@
+<h2>auth.py 模块设计</h2>
+<p class="subtitle">新建独立的认证模块，包含用户管理和权限检查</p>
+
+<div class="section">
+  <h3>模块职责</h3>
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+    <div style="background:#141425; padding:12px; border-radius:8px; border-left:3px solid #3b82f6;">
+      <h4>用户认证</h4>
+      <p style="font-size:13px; color:#a0a0c0; margin:0;">register_user()<br>login_user()<br>logout_session()<br>get_user_by_token()</p>
+    </div>
+    <div style="background:#141425; padding:12px; border-radius:8px; border-left:3px solid #fbbf24;">
+      <h4>权限检查</h4>
+      <p style="font-size:13px; color:#a0a0c0; margin:0;">check_permission()<br>get_allowed_tools()<br>get_allowed_file_scope()<br>get_allowed_db_scope()</p>
+    </div>
+    <div style="background:#141425; padding:12px; border-radius:8px; border-left:3px solid #4ade80;">
+      <h4>用户管理（管理后台用）</h4>
+      <p style="font-size:13px; color:#a0a0c0; margin:0;">list_users()<br>update_user_role()<br>toggle_user_active()</p>
+    </div>
+    <div style="background:#141425; padding:12px; border-radius:8px; border-left:3px solid #a78bfa;">
+      <h4>部门管理</h4>
+      <p style="font-size:13px; color:#a0a0c0; margin:0;">list_departments()<br>create_department()<br>update_department()<br>delete_department()</p>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>权限检查核心逻辑</h3>
+  <div style="background:#141425; padding:16px; border-radius:8px; font-family:monospace; font-size:13px; line-height:1.8;">
+    <div style="color:#8888aa;"># 角色 → 数字等级</div>
+    <div>ROLE_LEVEL = {</div>
+    <div style="margin-left:20px;"><span style="color:#fbbf24;">'super_admin'</span>: 6,  <span style="color:#8888aa;"># 超级管理员</span></div>
+    <div style="margin-left:20px;"><span style="color:#60a5fa;">'chairman'</span>: 5,     <span style="color:#8888aa;"># 董事长</span></div>
+    <div style="margin-left:20px;"><span style="color:#818cf8;">'gm'</span>: 4,          <span style="color:#8888aa;"># 总经理</span></div>
+    <div style="margin-left:20px;"><span style="color:#34d399;">'dept_head'</span>: 3,   <span style="color:#8888aa;"># 部门长</span></div>
+    <div style="margin-left:20px;"><span style="color:#a78bfa;">'staff'</span>: 2,       <span style="color:#8888aa;"># 部门职员</span></div>
+    <div style="margin-left:20px;"><span style="color:#6b7280;">'guest'</span>: 1,       <span style="color:#8888aa;"># 游客</span></div>
+    <div>}</div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>工具权限过滤</h3>
+  <table style="width:100%; border-collapse:collapse; font-size:12px;">
+    <thead>
+      <tr style="background:#1a1a3e;">
+        <th style="padding:6px 8px; border-bottom:2px solid #3b82f6;">工具分类</th>
+        <th style="padding:6px 8px; border-bottom:2px solid #3b82f6;">需要最低角色</th>
+        <th style="padding:6px 8px; border-bottom:2px solid #3b82f6;">额外限制</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td style="padding:5px 8px;">AI 聊天</td><td style="color:#6b7280;">游客</td><td style="color:#a0a0c0;">无</td></tr>
+      <tr style="background:#1f1040;"><td style="padding:5px 8px;">读取文件</td><td style="color:#6b7280;">游客</td><td style="color:#a0a0c0;">部门以下只能读本部门/公开文件</td></tr>
+      <tr><td style="padding:5px 8px;">写入/修改文件</td><td style="color:#a78bfa;">职员</td><td style="color:#a0a0c0;">部门长以下只能写本部门</td></tr>
+      <tr style="background:#1f1040;"><td style="padding:5px 8px;">删除文件</td><td style="color:#fbbf24;">超级管理员</td><td style="color:#a0a0c0;">仅超级管理员</td></tr>
+      <tr><td style="padding:5px 8px;">上传文件</td><td style="color:#a78bfa;">职员</td><td style="color:#a0a0c0;">无</td></tr>
+      <tr style="background:#1f1040;"><td style="padding:5px 8px;">DB SELECT</td><td style="color:#a78bfa;">职员</td><td style="color:#a0a0c0;">部门以下只能查本部门</td></tr>
+      <tr><td style="padding:5px 8px;">DB INSERT/UPDATE</td><td style="color:#34d399;">部门长</td><td style="color:#a0a0c0;">总经理只读少数表，部门长只写本部门</td></tr>
+      <tr style="background:#1f1040;"><td style="padding:5px 8px;">DB DELETE / DDL</td><td style="color:#fbbf24;">超级管理员</td><td style="color:#a0a0c0;">仅超级管理员</td></tr>
+      <tr><td style="padding:5px 8px;">压缩/解压</td><td style="color:#a78bfa;">职员</td><td style="color:#a0a0c0;">部门以下只能操作本部门</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="section">
+  <h3>请求处理流程</h3>
+  <div style="background:#141425; padding:16px; border-radius:8px; font-family:monospace; font-size:13px; line-height:2;">
+    <div><span style="color:#60a5fa;">HTTP Request</span> → 提取 cookie 中 token</div>
+    <div>  ↓</div>
+    <div><span style="color:#fbbf24;">get_user_by_token(token)</span> → user_id, role, dept_id</div>
+    <div>  ↓</div>
+    <div><span style="color:#fbbf24;">get_allowed_tools(role, dept_id)</span> → 过滤后的工具列表</div>
+    <div>  ↓</div>
+    <div>LLM 调用时只发送允许的工具定义</div>
+    <div>  ↓</div>
+    <div>工具执行时 <span style="color:#fbbf24;">check_permission(tool_name, role, dept_id, path)</span></div>
+    <div>  ↓  (双层验证)</div>
+    <div style="color:#4ade80;">✓ 允许执行</div>
+    <div style="color:#ef4444;">✗ 拒绝执行 + 记录日志</div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="pros-cons">
+    <div class="pros"><h4>安全设计</h4>
+      <ul>
+        <li><strong>双层过滤</strong>：LLM 层面隐藏不可用工具 + 执行层面再次校验</li>
+        <li><strong>文件路径控制</strong>：部门用户自动限定在部门子目录</li>
+        <li><strong>DB 表级控制</strong>：部分表对低权限角色完全不可见</li>
+        <li><strong>操作日志</strong>：危险操作 (DELETE/DROP) 记录到 audit 表</li>
+      </ul>
+    </div>
+  </div>
+</div>

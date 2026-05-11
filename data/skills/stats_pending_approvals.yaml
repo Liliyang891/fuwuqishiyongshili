@@ -1,0 +1,31 @@
+# 技能：待审批请假
+name: pending_approvals
+description: 查看待当前用户审批的请假申请
+min_role: dept_head
+priority: 10
+category: leave
+intent_patterns:
+  - (待.*审批|待.*处理|待.*审核).*(请假|休假)
+  - (审批|审核|处理).*(请假|休假).*(申请|待办)
+  - (请假|休假).*(审批|处理|待办|待我|需要我)
+  - (待办|待处理|待审批).*(事项|任务|工作)
+intent_keywords:
+  - 待审批
+  - 待办
+  - 审批请假
+  - 待处理请假
+handler:
+  type: sql
+  db: app
+  result_mode: list
+  sql: |
+    SELECT lr.id, lr.applicant_name, lr.days, lr.reason,
+      datetime(lr.created_at, 'unixepoch', 'localtime') as created_date
+    FROM leave_requests lr
+    WHERE lr.status = 'pending' AND lr.approver_role = {role}
+    ORDER BY lr.created_at ASC
+    LIMIT 20
+  row_template: "  • #{id} {applicant_name} | {days}天 | 事由: {reason} | 提交: {created_date}"
+  result_template: |
+    当前有 **{total_count}** 条请假申请等待你审批：
+    {rows}

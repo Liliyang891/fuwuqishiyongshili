@@ -30,17 +30,34 @@ HOST = os.environ.get('SSH_HOST', '')
 PORT = int(os.environ.get('SSH_PORT', 22))
 USER = os.environ.get('SSH_USER', 'root')
 PASSWORD = os.environ.get('SSH_PASSWORD', '')
+SSH_KEY = os.environ.get('SSH_KEY', '')
+SSH_KEY_PASSPHRASE = os.environ.get('SSH_KEY_PASSPHRASE', '')
 REMOTE_DIR = os.environ.get('REMOTE_DIR', '/root/fuwuqishiyongshili')
 SERVER_PORT = os.environ.get('SERVER_PORT', '8888')
 
 
 def _connect_ssh():
-    if not HOST or not PASSWORD:
-        print("错误：请在 .env 中配置 SSH_HOST 和 SSH_PASSWORD")
+    if not HOST:
+        print("错误：请在 .env 中配置 SSH_HOST")
+        sys.exit(1)
+    if not PASSWORD and not SSH_KEY:
+        print("错误：请在 .env 中配置 SSH_PASSWORD 或 SSH_KEY")
         sys.exit(1)
     ssh = paramiko.SSHClient()
     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    ssh.connect(HOST, port=PORT, username=USER, password=PASSWORD, timeout=10)
+
+    if SSH_KEY:
+        key_path = os.path.expanduser(SSH_KEY)
+        if not os.path.exists(key_path):
+            print(f"错误：SSH 私钥文件不存在: {key_path}")
+            sys.exit(1)
+        if SSH_KEY_PASSPHRASE:
+            key = paramiko.RSAKey.from_private_key_file(key_path, password=SSH_KEY_PASSPHRASE)
+        else:
+            key = paramiko.RSAKey.from_private_key_file(key_path)
+        ssh.connect(HOST, port=PORT, username=USER, pkey=key, timeout=10)
+    else:
+        ssh.connect(HOST, port=PORT, username=USER, password=PASSWORD, timeout=10)
     return ssh
 
 

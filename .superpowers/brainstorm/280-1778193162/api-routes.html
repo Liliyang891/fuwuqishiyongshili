@@ -1,0 +1,126 @@
+<h2>API 路由设计</h2>
+<p class="subtitle">在现有 web_server.py 基础上新增的认证和权限相关路由</p>
+
+<div class="section">
+  <h3>认证相关 API（公开，无需登录）</h3>
+  <table style="width:100%; border-collapse:collapse; font-size:13px;">
+    <thead>
+      <tr style="background:#1a1a3e;">
+        <th style="padding:8px 10px; border-bottom:2px solid #3b82f6;">方法</th>
+        <th style="padding:8px 10px; border-bottom:2px solid #3b82f6;">路由</th>
+        <th style="padding:8px 10px; border-bottom:2px solid #3b82f6;">说明</th>
+        <th style="padding:8px 10px; border-bottom:2px solid #3b82f6;">请求参数</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td style="padding:6px 10px;color:#4ade80;">POST</td>
+        <td style="padding:6px 10px;color:#60a5fa;">/api/register</td>
+        <td style="padding:6px 10px;">注册新用户（默认游客）</td>
+        <td style="padding:6px 10px;font-size:12px;">username, password, email?</td>
+      </tr>
+      <tr style="background:#1f1040;">
+        <td style="padding:6px 10px;color:#4ade80;">POST</td>
+        <td style="padding:6px 10px;color:#60a5fa;">/api/login</td>
+        <td style="padding:6px 10px;">登录，返回 session cookie</td>
+        <td style="padding:6px 10px;font-size:12px;">login, password, remember_me?</td>
+      </tr>
+      <tr>
+        <td style="padding:6px 10px;color:#4ade80;">POST</td>
+        <td style="padding:6px 10px;color:#60a5fa;">/api/logout</td>
+        <td style="padding:6px 10px;">登出，删除服务端 session</td>
+        <td style="padding:6px 10px;font-size:12px;">(cookie 中的 token)</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="section">
+  <h3>需要登录的 API（需携带 session cookie）</h3>
+  <table style="width:100%; border-collapse:collapse; font-size:13px;">
+    <thead>
+      <tr style="background:#1a1a3e;">
+        <th style="padding:8px 10px; border-bottom:2px solid #3b82f6;">方法</th>
+        <th style="padding:8px 10px; border-bottom:2px solid #3b82f6;">路由</th>
+        <th style="padding:8px 10px; border-bottom:2px solid #3b82f6;">说明</th>
+        <th style="padding:8px 10px; border-bottom:2px solid #3b82f6;">所需角色</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td style="padding:6px 10px;color:#4ade80;">GET</td>
+        <td style="padding:6px 10px;color:#60a5fa;">/api/me</td>
+        <td style="padding:6px 10px;">获取当前用户信息</td>
+        <td style="padding:6px 10px;">任意登录用户</td>
+      </tr>
+      <tr style="background:#1f1040;">
+        <td style="padding:6px 10px;color:#4ade80;">POST</td>
+        <td style="padding:6px 10px;color:#60a5fa;">/api/command</td>
+        <td style="padding:6px 10px;">AI 对话（已有，加权限检查）</td>
+        <td style="padding:6px 10px;">按角色限制工具调用</td>
+      </tr>
+      <tr>
+        <td style="padding:6px 10px;color:#4ade80;">POST</td>
+        <td style="padding:6px 10px;color:#60a5fa;">/api/upload</td>
+        <td style="padding:6px 10px;">文件上传（已有，加权限检查）</td>
+        <td style="padding:6px 10px;">职员及以上</td>
+      </tr>
+      <tr style="background:#1f1040;">
+        <td style="padding:6px 10px;color:#fbbf24;">GET/POST</td>
+        <td style="padding:6px 10px;color:#fbbf24;">/api/admin/*</td>
+        <td style="padding:6px 10px;">管理后台 API</td>
+        <td style="padding:6px 10px;color:#fbbf24;">超级管理员</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="section">
+  <h3>页面路由（返回 HTML）</h3>
+  <table style="width:100%; border-collapse:collapse; font-size:13px;">
+    <thead>
+      <tr style="background:#1a1a3e;">
+        <th style="padding:8px 10px; border-bottom:2px solid #3b82f6;">路由</th>
+        <th style="padding:8px 10px; border-bottom:2px solid #3b82f6;">说明</th>
+        <th style="padding:8px 10px; border-bottom:2px solid #3b82f6;">需要登录</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td style="padding:6px 10px;color:#60a5fa;">/login</td>
+        <td style="padding:6px 10px;">登录页面</td>
+        <td style="padding:6px 10px;color:#ef4444;">否</td>
+      </tr>
+      <tr style="background:#1f1040;">
+        <td style="padding:6px 10px;color:#60a5fa;">/register</td>
+        <td style="padding:6px 10px;">注册页面</td>
+        <td style="padding:6px 10px;color:#ef4444;">否</td>
+      </tr>
+      <tr>
+        <td style="padding:6px 10px;color:#60a5fa;">/chat/</td>
+        <td style="padding:6px 10px;">AI 助手主页（现有）</td>
+        <td style="padding:6px 10px;color:#4ade80;">是</td>
+      </tr>
+      <tr style="background:#1f1040;">
+        <td style="padding:6px 10px;color:#60a5fa;">/admin/</td>
+        <td style="padding:6px 10px;">管理后台页面</td>
+        <td style="padding:6px 10px;color:#fbbf24;">是（超管）</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="section">
+  <h3>认证流程</h3>
+  <div style="background:#141425; padding:16px; border-radius:8px; font-family:monospace; font-size:13px; line-height:1.8;">
+    <div>1. 用户访问 <span style="color:#60a5fa;">/chat/</span> → 检查 cookie 中 token</div>
+    <div style="margin-left:20px;color:#a0a0c0;">无 token → 302 跳转到 <span style="color:#60a5fa;">/login</span></div>
+    <div style="margin-left:20px;color:#a0a0c0;">有 token → 查 user_sessions &amp; users 表验证</div>
+    <div style="margin-left:40px;color:#a0a0c0;">有效 → 渲染 chat 页面，注入用户信息</div>
+    <div style="margin-left:40px;color:#a0a0c0;">无效/过期 → 清除 cookie，302 跳转 login</div>
+    <br>
+    <div>2. 每次 <span style="color:#fbbf24;">/api/command</span> 调用时</div>
+    <div style="margin-left:20px;color:#a0a0c0;">根据 user.role 过滤可用的 function calling 工具</div>
+    <div style="margin-left:20px;color:#a0a0c0;">只发送权限范围内的 tools 定义给 LLM</div>
+  </div>
+</div>

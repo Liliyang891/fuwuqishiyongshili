@@ -1,0 +1,102 @@
+<h2>6级用户权限矩阵设计</h2>
+<p class="subtitle">这是我对各角色权限的初步划分，请审阅并提出修改意见</p>
+
+<div class="section">
+  <h3>角色层级</h3>
+  <table style="width:100%; border-collapse:collapse; text-align:left; font-size:14px; margin-top:8px;">
+    <thead>
+      <tr style="background:#1a1a3e;">
+        <th style="padding:10px 12px; border-bottom:2px solid #3b82f6; width:15%;">等级</th>
+        <th style="padding:10px 12px; border-bottom:2px solid #3b82f6; width:25%;">角色</th>
+        <th style="padding:10px 12px; border-bottom:2px solid #3b82f6; width:20%;">AI 查询</th>
+        <th style="padding:10px 12px; border-bottom:2px solid #3b82f6; width:20%;">文件操作</th>
+        <th style="padding:10px 12px; border-bottom:2px solid #3b82f6; width:20%;">数据库操作</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="background:#1f1040;">
+        <td style="padding:10px 12px; border-bottom:1px solid #2a2a4e; color:#fbbf24; font-weight:bold;">Lv.6</td>
+        <td style="padding:10px 12px; border-bottom:1px solid #2a2a4e; font-weight:bold;">超级管理员</td>
+        <td style="padding:10px 12px; border-bottom:1px solid #2a2a4e; color:#4ade80;">全部功能 + 系统配置</td>
+        <td style="padding:10px 12px; border-bottom:1px solid #2a2a4e; color:#4ade80;">全部：读写删 + 上传</td>
+        <td style="padding:10px 12px; border-bottom:1px solid #2a2a4e; color:#4ade80;">全部：CRUD + 建表删表</td>
+      </tr>
+      <tr>
+        <td style="padding:10px 12px; border-bottom:1px solid #2a2a4e; color:#60a5fa; font-weight:bold;">Lv.5</td>
+        <td style="padding:10px 12px; border-bottom:1px solid #2a2a4e; font-weight:bold;">董事长</td>
+        <td style="padding:10px 12px; border-bottom:1px solid #2a2a4e; color:#4ade80;">全部功能 + 查看审计</td>
+        <td style="padding:10px 12px; border-bottom:1px solid #2a2a4e; color:#4ade80;">全部读写 / 不可删核心</td>
+        <td style="padding:10px 12px; border-bottom:1px solid #2a2a4e; color:#fbbf24;">SELECT 全部 / INSERT UPDATE</td>
+      </tr>
+      <tr style="background:#1f1040;">
+        <td style="padding:10px 12px; border-bottom:1px solid #2a2a4e; color:#818cf8; font-weight:bold;">Lv.4</td>
+        <td style="padding:10px 12px; border-bottom:1px solid #2a2a4e; font-weight:bold;">总经理</td>
+        <td style="padding:10px 12px; border-bottom:1px solid #2a2a4e; color:#4ade80;">全部 AI 查询功能</td>
+        <td style="padding:10px 12px; border-bottom:1px solid #2a2a4e; color:#fbbf24;">读写 / 不可删 / 可上传</td>
+        <td style="padding:10px 12px; border-bottom:1px solid #2a2a4e; color:#fbbf24;">SELECT + INSERT UPDATE / 不可 DDL</td>
+      </tr>
+      <tr>
+        <td style="padding:10px 12px; border-bottom:1px solid #2a2a4e; color:#34d399; font-weight:bold;">Lv.3</td>
+        <td style="padding:10px 12px; border-bottom:1px solid #2a2a4e; font-weight:bold;">部门长</td>
+        <td style="padding:10px 12px; border-bottom:1px solid #2a2a4e; color:#fbbf24;">本部门相关 AI 查询</td>
+        <td style="padding:10px 12px; border-bottom:1px solid #2a2a4e; color:#fbbf24;">本部门文件：读写 / 其他：只读</td>
+        <td style="padding:10px 12px; border-bottom:1px solid #2a2a4e; color:#fbbf24;">本部门数据 SELECT / INSERT UPDATE</td>
+      </tr>
+      <tr style="background:#1f1040;">
+        <td style="padding:10px 12px; border-bottom:1px solid #2a2a4e; color:#a78bfa; font-weight:bold;">Lv.2</td>
+        <td style="padding:10px 12px; border-bottom:1px solid #2a2a4e; font-weight:bold;">部门职员</td>
+        <td style="padding:10px 12px; border-bottom:1px solid #2a2a4e; color:#ef4444;">受限 AI 查询（频率/范围）</td>
+        <td style="padding:10px 12px; border-bottom:1px solid #2a2a4e; color:#ef4444;">本部门文件只读 / 可上传</td>
+        <td style="padding:10px 12px; border-bottom:1px solid #2a2a4e; color:#ef4444;">仅 SELECT 本部门数据</td>
+      </tr>
+      <tr>
+        <td style="padding:10px 12px; color:#6b7280; font-weight:bold;">Lv.1</td>
+        <td style="padding:10px 12px; color:#9ca3af;">游客</td>
+        <td style="padding:10px 12px; color:#ef4444;">仅基础问答（不含敏感）</td>
+        <td style="padding:10px 12px; color:#ef4444;">仅读公开文件</td>
+        <td style="padding:10px 12px; color:#ef4444;">无数据库权限</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="section">
+  <h3>具体操作权限明细</h3>
+  <table style="width:100%; border-collapse:collapse; font-size:13px;">
+    <thead>
+      <tr style="background:#1a1a3e;">
+        <th style="padding:8px 10px; border-bottom:2px solid #3b82f6;">操作类型</th>
+        <th style="padding:8px 10px; border-bottom:2px solid #3b82f6; text-align:center;">超级管理员</th>
+        <th style="padding:8px 10px; border-bottom:2px solid #3b82f6; text-align:center;">董事长</th>
+        <th style="padding:8px 10px; border-bottom:2px solid #3b82f6; text-align:center;">总经理</th>
+        <th style="padding:8px 10px; border-bottom:2px solid #3b82f6; text-align:center;">部门长</th>
+        <th style="padding:8px 10px; border-bottom:2px solid #3b82f6; text-align:center;">部门职员</th>
+        <th style="padding:8px 10px; border-bottom:2px solid #3b82f6; text-align:center;">游客</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td style="padding:6px 10px;">AI 对话</td>
+        <td style="text-align:center;color:#4ade80;">✓</td><td style="text-align:center;color:#4ade80;">✓</td><td style="text-align:center;color:#4ade80;">✓</td><td style="text-align:center;color:#4ade80;">✓</td><td style="text-align:center;color:#fbbf24;">受限</td><td style="text-align:center;color:#fbbf24;">基础</td></tr>
+      <tr style="background:#1f1040;"><td style="padding:6px 10px;">文件读取</td>
+        <td style="text-align:center;color:#4ade80;">全部</td><td style="text-align:center;color:#4ade80;">全部</td><td style="text-align:center;color:#4ade80;">全部</td><td style="text-align:center;color:#fbbf24;">部门+公开</td><td style="text-align:center;color:#fbbf24;">本部门</td><td style="text-align:center;color:#ef4444;">仅公开</td></tr>
+      <tr><td style="padding:6px 10px;">文件写入/修改</td>
+        <td style="text-align:center;color:#4ade80;">✓</td><td style="text-align:center;color:#4ade80;">✓</td><td style="text-align:center;color:#4ade80;">✓</td><td style="text-align:center;color:#fbbf24;">本部门</td><td style="text-align:center;color:#ef4444;">✗</td><td style="text-align:center;color:#ef4444;">✗</td></tr>
+      <tr style="background:#1f1040;"><td style="padding:6px 10px;">文件删除</td>
+        <td style="text-align:center;color:#4ade80;">✓</td><td style="text-align:center;color:#ef4444;">✗</td><td style="text-align:center;color:#ef4444;">✗</td><td style="text-align:center;color:#ef4444;">✗</td><td style="text-align:center;color:#ef4444;">✗</td><td style="text-align:center;color:#ef4444;">✗</td></tr>
+      <tr><td style="padding:6px 10px;">文件上传</td>
+        <td style="text-align:center;color:#4ade80;">✓</td><td style="text-align:center;color:#4ade80;">✓</td><td style="text-align:center;color:#4ade80;">✓</td><td style="text-align:center;color:#4ade80;">✓</td><td style="text-align:center;color:#4ade80;">✓</td><td style="text-align:center;color:#ef4444;">✗</td></tr>
+      <tr style="background:#1f1040;"><td style="padding:6px 10px;">DB SELECT</td>
+        <td style="text-align:center;color:#4ade80;">全部</td><td style="text-align:center;color:#4ade80;">全部</td><td style="text-align:center;color:#fbbf24;">受限</td><td style="text-align:center;color:#fbbf24;">本部门</td><td style="text-align:center;color:#fbbf24;">本部门</td><td style="text-align:center;color:#ef4444;">✗</td></tr>
+      <tr><td style="padding:6px 10px;">DB INSERT/UPDATE</td>
+        <td style="text-align:center;color:#4ade80;">✓</td><td style="text-align:center;color:#4ade80;">✓</td><td style="text-align:center;color:#fbbf24;">受限</td><td style="text-align:center;color:#fbbf24;">本部门</td><td style="text-align:center;color:#ef4444;">✗</td><td style="text-align:center;color:#ef4444;">✗</td></tr>
+      <tr style="background:#1f1040;"><td style="padding:6px 10px;">DB DELETE / DDL</td>
+        <td style="text-align:center;color:#4ade80;">✓</td><td style="text-align:center;color:#ef4444;">✗</td><td style="text-align:center;color:#ef4444;">✗</td><td style="text-align:center;color:#ef4444;">✗</td><td style="text-align:center;color:#ef4444;">✗</td><td style="text-align:center;color:#ef4444;">✗</td></tr>
+      <tr><td style="padding:6px 10px;">用户管理</td>
+        <td style="text-align:center;color:#4ade80;">✓</td><td style="text-align:center;color:#4ade80;">✓</td><td style="text-align:center;color:#ef4444;">✗</td><td style="text-align:center;color:#ef4444;">✗</td><td style="text-align:center;color:#ef4444;">✗</td><td style="text-align:center;color:#ef4444;">✗</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="section">
+  <p style="color:#a0a0c0; font-size:13px;">💡 <strong>绿色</strong> = 完全允许 · <strong>黄色</strong> = 有条件允许 · <strong>红色</strong> = 禁止</p>
+</div>
