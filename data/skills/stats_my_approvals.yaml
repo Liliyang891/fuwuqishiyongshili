@@ -1,0 +1,36 @@
+# 技能：我的审批历史
+name: my_approvals
+description: 查看我已经审批过的请假记录
+min_role: dept_head
+priority: 10
+category: leave
+intent_patterns:
+  - (我|我的).*(审批|已批|批过|批准|批复).*(历史|记录|列表|了哪些|了谁|了什么人)
+  - (审批|批准).*(历史|记录|过哪些|过谁).*(我|我的)
+  - (我|我的).*(审|批|处理).*(过|了).*(请假|休假|调休)
+intent_keywords:
+  - 审批历史
+  - 我审批的
+  - 已批准记录
+  - 审批记录
+  - 我批的
+handler:
+  type: sql
+  db: app
+  result_mode: list
+  sql: |
+    SELECT lr.applicant_name, lr.days, lr.reason,
+      CASE lr.status
+        WHEN 'approved' THEN '已批准'
+        WHEN 'rejected' THEN '已拒绝'
+        ELSE lr.status
+      END as status_name,
+      datetime(lr.resolved_at, 'unixepoch', 'localtime') as resolved_date
+    FROM leave_requests lr
+    WHERE lr.approver_role = {role} AND lr.status != 'pending'
+    ORDER BY lr.resolved_at DESC
+    LIMIT 15
+  row_template: "  • {resolved_date} | {applicant_name} | {days}天 | {reason} | {status_name}"
+  result_template: |
+    你已审批的请假记录共 **{total_count}** 条：
+    {rows}

@@ -1,0 +1,29 @@
+# 技能：通讯录搜索
+name: directory_search
+description: 按姓名或部门搜索员工通讯录
+min_role: staff
+priority: 12
+category: org
+intent_patterns:
+  - (查|找|搜|帮我|帮).*(一下|一查|查查|找找).*(人|同事|员工|谁|在哪|哪个部门)
+  - (查|找|搜|帮我|帮).*(一下|一查|查查|找找)
+  - (通讯录|联系方式|电话|邮箱).*(查|找|搜|搜索)
+  - (查|找|搜|搜索|帮我).*(人|同事|员工|电话|联系方式|通讯录)
+  - (谁|哪个|哪些|什么人).*(电话|联系方式|邮箱|分机|在哪|哪个部门|部门)
+  - .*(有.?哪些|有.?几个|有.?多少).*(人|同事|员工)
+intent_keywords:
+  - 通讯录
+  - 联系方式
+  - 查同事
+  - 找人
+  - 查一下
+  - 找一下
+  - 员工查询
+  - 电话号码
+  - 有哪些人
+  - 有哪些同事
+  - 在哪
+  - 电话
+handler:
+  type: function
+  function: agent.skill_registry_handlers.search_directory

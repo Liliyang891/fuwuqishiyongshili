@@ -1,0 +1,25 @@
+# 技能：制度搜索
+name: policy_search
+description: 按类型/关键词搜索公司制度政策
+min_role: guest
+priority: 10
+category: policy
+intent_patterns:
+  - (查|找|搜|搜索|查看).*(考勤|出差|报销|培训|安全|质量|GMP|采购|合同|印章|用车|会议|绩效|福利).*(制度|规定|政策|流程)
+  - (考勤|出差|报销|培训|安全|质量|GMP).*(制度|规定|政策|流程|怎么|如何).*(查|看|了解)
+intent_keywords:
+  - 考勤制度
+  - 出差规定
+  - 报销制度
+  - 报销流程
+  - 培训制度
+  - 安全制度
+  - GMP规范
+  - 采购制度
+  - 合同规定
+  - 印章管理
+  - 绩效考核
+  - 福利制度
+handler:
+  type: function
+  function: agent.skill_registry_handlers.search_policies

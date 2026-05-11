@@ -1,0 +1,35 @@
+# 技能：各部门负责人
+name: dept_heads
+description: 查看各部门负责人（部门长）名单
+min_role: guest
+priority: 11
+category: org
+intent_patterns:
+  - (谁|哪位|什么).*(负责|管|主管|领导|头).*(部门|部|工作|生产|质量|研发|财务|行政|人事|销售|市场)
+  - (部门|研发|质量|生产|财务|行政|人事|销售|市场).*(负责|主管|经理|领导|部长|老大|head|长|是谁|是谁管)
+  - (负责|主管|经理).*(人|部门|部|名单)
+  - (各部门|每个部门|所有部门).*(谁|哪些人|什么人).*(负责|管|领导|说了算)
+intent_keywords:
+  - 负责人
+  - 部门主管
+  - 部门经理
+  - 部门领导
+  - 谁负责
+  - 部门长
+  - 主管是谁
+  - 谁管
+handler:
+  type: sql
+  db: users
+  result_mode: list
+  sql: |
+    SELECT u.username, d.name as dept_name, u.email,
+      (SELECT COUNT(*) FROM users u2 WHERE u2.department_id = d.id AND u2.is_active = 1) as member_count
+    FROM users u
+    JOIN departments d ON u.department_id = d.id
+    WHERE u.role = 'dept_head' AND u.is_active = 1
+    ORDER BY d.id
+  row_template: "  • **{dept_name}**：{username}（{email}，部门共 {member_count} 人）"
+  result_template: |
+    各部门负责人共 **{total_count}** 位：
+    {rows}

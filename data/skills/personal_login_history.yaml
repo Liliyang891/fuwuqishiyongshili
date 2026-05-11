@@ -1,0 +1,32 @@
+# 技能：最近登录记录
+name: login_history
+description: 查看当前用户的最近登录历史
+min_role: staff
+priority: 10
+category: personal
+intent_patterns:
+  - (最近|上次|什么.?时候|哪.?天).*(登录|登陆|上线)
+  - (登录|登陆).*(记录|历史|时间)
+  - (我|我的).*(登录|登陆).*(记录|历史|情况|时间)
+intent_keywords:
+  - 登录记录
+  - 登录历史
+  - 上次登录
+  - 最近登录
+  - 登陆记录
+handler:
+  type: sql
+  db: users
+  result_mode: list
+  sql: |
+    SELECT datetime(created_at, 'unixepoch', 'localtime') as login_time,
+      action,
+      detail
+    FROM audit_log
+    WHERE user_id = {id} AND action = 'user_login'
+    ORDER BY created_at DESC
+    LIMIT 10
+  row_template: "  • {login_time} | {action} | {detail}"
+  result_template: |
+    你最近 **{total_count}** 次登录记录：
+    {rows}

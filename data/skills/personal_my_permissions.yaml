@@ -1,0 +1,20 @@
+# 技能：我的权限范围
+name: my_permissions
+description: 查看当前角色拥有的系统权限和可访问功能
+min_role: guest
+priority: 10
+category: personal
+intent_patterns:
+  - (我|我的).*(权限|能做什么|能干什么|能访问|能看|能查|有什么权限|有什么功能|可以做什么)
+  - (有什么|哪些|什么).*(权限|功能).*(我|我的|我能)
+  - (角色|账号).*(权限|范围|能力)
+intent_keywords:
+  - 我的权限
+  - 权限说明
+  - 权限范围
+  - 我能做什么
+  - 角色权限
+  - 功能权限
+handler:
+  type: function
+  function: agent.skill_registry_handlers.get_my_permissions
