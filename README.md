@@ -163,7 +163,7 @@ python test_simulate.py
 | `PROVIDER[N]_TEMPERATURE` | 温度参数 | 0.7 |
 | `SERVER_PORT` | 服务端口 | 8888 |
 | `CORS_ORIGIN` | 跨域来源 | * |
-| `MAX_TOOL_ROUNDS` | 最大工具调用轮次 | 5 |
+| `MAX_TOOL_ROUNDS` | 最大工具调用轮次 | 15 |
 | `SPEECH_API_URL` | 语音识别 API 端点 | - |
 | `SPEECH_API_KEY` | 语音识别 API 密钥 | - |
 | `UPLOAD_MAX_SIZE` | 最大上传字节数 | 52428800 (50MB) |

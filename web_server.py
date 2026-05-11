@@ -58,7 +58,7 @@ HOST = '0.0.0.0'
 PORT = int(os.environ.get('SERVER_PORT', 8888))
 CORS_ORIGIN = os.environ.get('CORS_ORIGIN', '*')
 MAX_HISTORY = 20
-MAX_TOOL_ROUNDS = int(os.environ.get('MAX_TOOL_ROUNDS', 5))  # 最大工具调用轮次
+MAX_TOOL_ROUNDS = int(os.environ.get('MAX_TOOL_ROUNDS', 15))  # 最大工具调用轮次
 SPEECH_API_URL = os.environ.get('SPEECH_API_URL', '')  # 语音识别 API（可选）
 SPEECH_API_KEY = os.environ.get('SPEECH_API_KEY', '')
 UPLOAD_MAX_SIZE = int(os.environ.get('UPLOAD_MAX_SIZE', 50 * 1024 * 1024))  # 50MB
@@ -163,7 +163,7 @@ def _build_system_prompt(user=None):
 
 def _create_agent_loop(user=None):
     """创建 AgentLoop 实例"""
-    loop = agent.AgentLoop(_agent_registry, _llm_call_wrapper, max_turns=MAX_TOOL_ROUNDS + 1)
+    loop = agent.AgentLoop(_agent_registry, _llm_call_wrapper, max_turns=MAX_TOOL_ROUNDS)
     if user:
         loop._user = user
     return loop
