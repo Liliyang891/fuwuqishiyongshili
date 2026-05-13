@@ -1,0 +1,32 @@
+name: excel_query_imports
+description: 查询已导入的 Excel 工作表列表（按关键词和权限过滤）
+min_role: staff
+priority: 11
+category: excel
+intent_patterns:
+  - (查询|查看|列出|显示|有哪些).*(导入|excel|表格|工作表|周计划|跟进).*(数据|内容|记录|列表)
+  - (工作计划|周报|跟进表|周计划|表格|excel).*(导入|上传|数据)
+  - (导入了|上传了).*(哪些|什么|多少).*(表格|excel|数据|文件)
+  - (最近|最新).*导入.*(表格|excel)
+intent_keywords:
+  - 导入数据
+  - 周计划
+  - 跟进表
+  - excel数据
+  - 表格查询
+  - 导入的表格
+handler:
+  type: sql
+  db: app
+  result_mode: list
+  sql: |
+    SELECT ei.id, ei.filename, ei.uploader_name, ei.sheet_count, ei.total_rows,
+      ei.file_size, datetime(ei.created_at, 'unixepoch', 'localtime') as import_time
+    FROM excel_imports ei
+    WHERE ei.status = 'active'
+    ORDER BY ei.created_at DESC
+    LIMIT 10
+  row_template: "  • #{id} {filename} | {sheet_count}个工作表 | {total_rows}行 | 上传者: {uploader_name} | {import_time}"
+  result_template: |
+    已导入的 Excel 数据（共 {total_count} 条）：
+    {rows}

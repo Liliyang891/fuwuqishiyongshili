@@ -25,6 +25,8 @@ td { padding:7px 10px; border-bottom:1px solid #2a2a4e; }
 .btn-primary { background:#3b82f6; color:#fff; }
 .btn-danger { background:#ef4444; color:#fff; }
 .btn-success { background:#4ade80; color:#000; }
+.btn-approve { background:#4ade80; color:#000; }
+.btn-reject { background:#ef4444; color:#fff; }
 .btn-sm { padding:3px 8px; font-size:11px; }
 .modal-overlay { display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.6); z-index:100; align-items:center; justify-content:center; }
 .modal-overlay.show { display:flex; }
@@ -47,7 +49,9 @@ td { padding:7px 10px; border-bottom:1px solid #2a2a4e; }
     <h3>管理后台</h3>
     <a class="active" onclick="showPanel('users')">用户管理</a>
     <a onclick="showPanel('departments')">部门管理</a>
+    <a onclick="showPanel('approvals')">注册审批</a>
     <a onclick="showPanel('audit')">审计日志</a>
+    <a onclick="showPanel('excel')">Excel管理</a>
     <a class="back-link" href="/chat/">← 返回助手</a>
 </div>
 <div class="main">
@@ -81,6 +85,53 @@ td { padding:7px 10px; border-bottom:1px solid #2a2a4e; }
         <table><thead><tr><th>ID</th><th>操作者</th><th>操作类型</th><th>详情</th><th>时间</th></tr></thead>
         <tbody id="auditTableBody"></tbody></table>
     </div>
+    <div class="panel" id="panel-approvals">
+        <h2>注册审批</h2>
+        <p style="color:#a0a0c0;margin-bottom:16px;font-size:13px;">审批新注册用户，通过后方可登录AI助手平台。</p>
+        <table><thead><tr><th>ID</th><th>用户名</th><th>邮箱</th><th>角色</th><th>部门</th><th>注册时间</th><th>操作</th></tr></thead>
+        <tbody id="approvalTableBody"></tbody></table>
+    </div>
+    <div class="panel" id="panel-excel">
+        <h2>Excel 导入管理</h2>
+        <div class="toolbar">
+            <input type="file" id="excelFileInput" accept=".xlsx,.xls" style="display:none" onchange="uploadExcel(this.files)">
+            <button class="btn btn-primary" onclick="document.getElementById('excelFileInput').click()">+ 上传 Excel</button>
+            <select id="filterExcelStatus" onchange="loadExcelImports()">
+                <option value="active">活跃</option>
+                <option value="deleted">已删除</option>
+            </select>
+            <span id="excelTotal" style="color:#a0a0c0;font-size:13px;"></span>
+        </div>
+        <table>
+            <thead><tr>
+                <th>ID</th><th>文件名</th><th>上传者</th><th>工作表数</th><th>总行数</th>
+                <th>大小</th><th>导入时间</th><th>操作</th>
+            </tr></thead>
+            <tbody id="excelImportTableBody"></tbody>
+        </table>
+
+        <div id="excelSheetDetail" style="display:none; margin-top:24px;">
+            <h3 style="color:#60a5fa;">工作表列表 — <span id="detailFileName"></span></h3>
+            <button class="btn btn-sm" onclick="document.getElementById('excelSheetDetail').style.display='none'">← 返回列表</button>
+            <table style="margin-top:12px;">
+                <thead><tr><th>ID</th><th>工作表名</th><th>列数</th><th>行数</th><th>列标题</th><th>操作</th></tr></thead>
+                <tbody id="sheetDetailBody"></tbody>
+            </table>
+        </div>
+
+        <div id="excelRowView" style="display:none; margin-top:16px;">
+            <h3 style="color:#60a5fa;">行数据 — <span id="rowViewSheetName"></span></h3>
+            <div class="toolbar">
+                <input type="text" id="rowSearch" placeholder="搜索数据..." oninput="filterExcelRows()" style="width:300px;">
+                <button class="btn btn-sm btn-primary" onclick="exportSheetCSV()">导出 CSV</button>
+                <button class="btn btn-sm" onclick="document.getElementById('excelRowView').style.display='none'">← 关闭</button>
+                <span id="rowPagination" style="color:#a0a0c0;font-size:13px;margin-left:12px;"></span>
+            </div>
+            <div style="overflow-x:auto;">
+                <table class="row-table"><tbody id="rowDataBody"></tbody></table>
+            </div>
+        </div>
+    </div>
 </div>
 <div class="modal-overlay" id="editModal">
     <div class="modal">
@@ -110,7 +161,9 @@ function showPanel(name) {
     currentPanel = name;
     if (name === 'users') loadUsers();
     else if (name === 'departments') loadDepts();
+    else if (name === 'approvals') loadApprovals();
     else if (name === 'audit') loadAudit();
+    else if (name === 'excel') loadExcelImports();
 }
 
 async function api(url, method='GET', body=null) {
@@ -233,6 +286,176 @@ async function loadAudit() {
             <td>${l.id}</td><td>${l.username || l.user_id}</td><td>${l.action}</td>
             <td>${l.detail}</td><td>${new Date(l.created_at*1000).toLocaleString()}</td>
         </tr>`).join('');
+}
+
+async function loadApprovals() {
+    const data = await api('/api/admin/users?approval_status=pending');
+    const tbody = document.getElementById('approvalTableBody');
+    if (!data.users || data.users.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#6b7280;padding:24px;">暂无待审批用户</td></tr>';
+        return;
+    }
+    tbody.innerHTML = data.users.map(u =>
+        `<tr>
+            <td>${u.id}</td><td>${u.username}</td><td>${u.email || '-'}</td>
+            <td class="role-${u.role}">${u.role_name}</td><td>${u.department_name || '-'}</td>
+            <td>${new Date(u.created_at*1000).toLocaleString()}</td>
+            <td>
+                <button class="btn btn-approve btn-sm" onclick="approveUser(${u.id},true)">通过</button>
+                <button class="btn btn-reject btn-sm" onclick="approveUser(${u.id},false)">拒绝</button>
+            </td>
+        </tr>`).join('');
+}
+
+async function approveUser(id, approved) {
+    const action = approved ? '通过' : '拒绝';
+    if (!confirm('确定要' + action + '此注册申请吗？')) return;
+    try {
+        const resp = await api('/api/admin/users/' + id + '/approve', 'POST', { approved: approved });
+        if (resp.success) {
+            loadApprovals();
+        } else {
+            alert('操作失败: ' + (resp.error || '未知错误'));
+        }
+    } catch(e) { alert('请求失败'); }
+}
+
+// ========== Excel 管理 ==========
+
+let excelSheetId = null;
+let excelSheetHeaders = [];
+let excelCurrentPage = 1;
+let excelPageSize = 100;
+
+async function uploadExcel(files) {
+    if (!files.length) return;
+    const file = files[0];
+    const ext = file.name.split('.').pop().toLowerCase();
+    if (ext !== 'xlsx' && ext !== 'xls') {
+        alert('请上传 .xlsx 或 .xls 文件');
+        return;
+    }
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('import_notes', file.name + ' 导入');
+
+    const resp = await fetch('/api/excel/upload', { method: 'POST', body: formData });
+    const data = await resp.json();
+    if (data.success) {
+        alert(data.message);
+        loadExcelImports();
+    } else {
+        alert('上传失败: ' + (data.error || '未知错误'));
+    }
+    document.getElementById('excelFileInput').value = '';
+}
+
+async function loadExcelImports() {
+    const status = document.getElementById('filterExcelStatus').value;
+    const data = await api('/api/excel/list?status=' + status);
+    document.getElementById('excelTotal').textContent = '共 ' + (data.total || 0) + ' 条';
+    if (!data.imports || data.imports.length === 0) {
+        document.getElementById('excelImportTableBody').innerHTML =
+            '<tr><td colspan="8" style="text-align:center;color:#6b7280;padding:24px;">暂无导入的 Excel 数据</td></tr>';
+        return;
+    }
+    document.getElementById('excelImportTableBody').innerHTML = data.imports.map(imp => {
+        const sizeKb = (imp.file_size / 1024).toFixed(0);
+        return `<tr>
+            <td>${imp.id}</td>
+            <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${imp.filename}">${imp.filename}</td>
+            <td>${imp.uploader_name || '-'}</td>
+            <td>${imp.sheet_count}</td><td>${imp.total_rows}</td>
+            <td>${sizeKb} KB</td><td>${imp.created_at || '-'}</td>
+            <td>
+                <button class="btn btn-primary btn-sm" onclick="viewSheets(${imp.id}, '${imp.filename.replace(/'/g, "\\'")}')">查看</button>
+                ${imp.status === 'active' ? `<button class="btn btn-danger btn-sm" onclick="deleteExcelImport(${imp.id})">删除</button>` : ''}
+            </td>
+        </tr>`;
+    }).join('');
+}
+
+async function viewSheets(importId, filename) {
+    const data = await api('/api/excel/sheets/' + importId);
+    if (!data.success) { alert(data.error); return; }
+    document.getElementById('detailFileName').textContent = filename;
+    document.getElementById('excelRowView').style.display = 'none';
+    document.getElementById('sheetDetailBody').innerHTML = data.sheets.map(s => {
+        const headers = (s.column_headers || []).join(', ');
+        return `<tr>
+            <td>${s.id}</td><td>${s.sheet_name}</td>
+            <td>${s.column_count}</td><td>${s.row_count}</td>
+            <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${headers}">${headers}</td>
+            <td><button class="btn btn-primary btn-sm" onclick="viewSheetData(${s.id}, '${s.sheet_name.replace(/'/g, "\\'")}', ${JSON.stringify(s.column_headers).replace(/"/g, '&quot;')})">查看数据</button></td>
+        </tr>`;
+    }).join('');
+    document.getElementById('excelSheetDetail').style.display = 'block';
+}
+
+async function viewSheetData(sid, sname, headers) {
+    excelSheetId = sid;
+    excelSheetHeaders = headers;
+    excelCurrentPage = 1;
+    document.getElementById('rowViewSheetName').textContent = sname;
+    document.getElementById('excelRowView').style.display = 'block';
+    await loadExcelRows();
+}
+
+async function loadExcelRows() {
+    if (!excelSheetId) return;
+    const search = document.getElementById('rowSearch').value;
+    const offset = (excelCurrentPage - 1) * excelPageSize;
+    const params = new URLSearchParams({
+        limit: excelPageSize, offset: offset, search: search
+    });
+    const data = await api('/api/excel/data/' + excelSheetId + '?' + params.toString());
+    if (!data.success) { alert(data.error); return; }
+
+    // Build table header and rows
+    const h = excelSheetHeaders;
+    let html = '<tr>' + h.map(c => `<th>${c}</th>`).join('') + '</tr>';
+    data.rows.forEach(r => {
+        html += '<tr>' + h.map(c => {
+            const v = (r.row_data || {})[c] || '';
+            return `<td title="${v.replace(/"/g, '&quot;')}">${v.substring(0, 100)}${v.length > 100 ? '...' : ''}</td>`;
+        }).join('') + '</tr>';
+    });
+    document.getElementById('rowDataBody').innerHTML = html;
+
+    const totalPages = Math.ceil(data.total_rows / excelPageSize) || 1;
+    document.getElementById('rowPagination').innerHTML =
+        `共 ${data.total_rows} 行 | 第 ${excelCurrentPage}/${totalPages} 页 `;
+    if (excelCurrentPage > 1) {
+        document.getElementById('rowPagination').innerHTML +=
+            `<button class="btn btn-sm" onclick="excelCurrentPage--;loadExcelRows()">上一页</button> `;
+    }
+    if (excelCurrentPage < totalPages) {
+        document.getElementById('rowPagination').innerHTML +=
+            `<button class="btn btn-sm" onclick="excelCurrentPage++;loadExcelRows()">下一页</button>`;
+    }
+}
+
+function filterExcelRows() {
+    excelCurrentPage = 1;
+    loadExcelRows();
+}
+
+function exportSheetCSV() {
+    if (!excelSheetId) return;
+    window.open('/api/excel/export/' + excelSheetId, '_blank');
+}
+
+async function deleteExcelImport(id) {
+    if (!confirm('确定删除此导入记录吗？')) return;
+    const data = await api('/api/excel/delete/' + id, 'POST');
+    if (data.success) {
+        alert(data.message);
+        loadExcelImports();
+        document.getElementById('excelSheetDetail').style.display = 'none';
+        document.getElementById('excelRowView').style.display = 'none';
+    } else {
+        alert('删除失败: ' + (data.error || '未知错误'));
+    }
 }
 
 loadUsers();

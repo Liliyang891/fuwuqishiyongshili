@@ -1,0 +1,19 @@
+name: excel_search_content
+description: 在已导入的 Excel 数据中搜索关键词（全文搜索所有工作表）
+min_role: staff
+priority: 10
+category: excel
+intent_patterns:
+  - (搜索|查找|找一下|查一下)\s*(.+)
+  - (搜索|查找|找|查).*(导入|excel|表格|数据).*(内容|里面|包含)
+  - (excel|表格|导入的数据).*(搜索|查找|包含|找)
+  - (谁|哪个|哪些|什么).*(负责|完成|进行|处理|做|在)
+intent_keywords:
+  - 搜索表格
+  - 表格搜索
+  - 查找数据
+  - 搜索导入
+  - 找一下数据
+handler:
+  type: function
+  function: excel_handlers.skill_search_excel

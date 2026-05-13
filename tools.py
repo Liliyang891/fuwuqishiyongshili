@@ -154,7 +154,7 @@ def _human_size(size):
 # ========== 数据库初始化 ==========
 
 def _init_app_db():
-    """初始化应用数据库 app.db（元数据 + 会话 + 策略 + 请假）"""
+    """初始化应用数据库 app.db（元数据 + 会话 + 策略 + 请假 + 公告 + 培训 + SOP + Excel导入）"""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute("PRAGMA journal_mode=WAL")
@@ -254,6 +254,48 @@ def _init_app_db():
             updated_at REAL
         )
     ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS excel_imports (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            filename TEXT NOT NULL,
+            original_path TEXT NOT NULL,
+            file_size INTEGER,
+            file_md5 TEXT,
+            uploaded_by INTEGER,
+            uploader_name TEXT,
+            sheet_count INTEGER DEFAULT 0,
+            total_rows INTEGER DEFAULT 0,
+            status TEXT DEFAULT 'active',
+            import_notes TEXT DEFAULT '',
+            created_at REAL
+        )
+    ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS excel_sheets (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            import_id INTEGER NOT NULL,
+            sheet_name TEXT NOT NULL,
+            sheet_index INTEGER DEFAULT 0,
+            header_row_index INTEGER DEFAULT 0,
+            column_count INTEGER DEFAULT 0,
+            row_count INTEGER DEFAULT 0,
+            column_headers TEXT NOT NULL DEFAULT '[]',
+            FOREIGN KEY (import_id) REFERENCES excel_imports(id) ON DELETE CASCADE
+        )
+    ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS excel_rows (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sheet_id INTEGER NOT NULL,
+            row_index INTEGER DEFAULT 0,
+            row_data TEXT NOT NULL DEFAULT '{}',
+            created_at REAL,
+            FOREIGN KEY (sheet_id) REFERENCES excel_sheets(id) ON DELETE CASCADE
+        )
+    ''')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_excel_imports_uploader ON excel_imports(uploaded_by)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_excel_sheets_import ON excel_sheets(import_id)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_excel_rows_sheet ON excel_rows(sheet_id)')
     conn.commit()
     conn.close()
 
@@ -298,6 +340,11 @@ def _init_users_db():
     # 迁移：为旧版 user_sessions 表补充 last_active 列
     try:
         cursor.execute('ALTER TABLE user_sessions ADD COLUMN last_active REAL DEFAULT 0')
+    except Exception:
+        pass  # 列已存在
+    # 迁移：添加 approval_status 列（现有用户默认 approved，向后兼容）
+    try:
+        cursor.execute("ALTER TABLE users ADD COLUMN approval_status TEXT DEFAULT 'approved'")
     except Exception:
         pass  # 列已存在
     cursor.execute('''
@@ -1220,7 +1267,9 @@ def count_items(path="", recursive=False):
 
 # 保护的系统表，不允许 DROP/CREATE
 _PROTECTED_TABLES = {'_meta', 'sessions', 'departments', 'users',
-                     'user_sessions', 'audit_log', 'policies', 'leave_requests'}
+                     'user_sessions', 'audit_log', 'policies', 'leave_requests',
+                     'announcements', 'training_records', 'sop_documents',
+                     'excel_imports', 'excel_sheets', 'excel_rows'}
 _TABLE_NAME_RE = re.compile(r'^[a-zA-Z_][a-zA-Z0-9_]{0,63}$')
 
 

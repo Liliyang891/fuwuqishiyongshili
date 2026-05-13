@@ -92,6 +92,55 @@
             font-size: 12px; font-weight: 600;
         }
         .btn-logout:hover { background: #fecaca; }
+        .btn-edit-profile {
+            padding: 4px 12px; background: #e8f5e0; color: var(--green-dark);
+            border: 1px solid rgba(75,180,45,0.2); border-radius: 6px; cursor: pointer;
+            font-size: 12px; font-weight: 600;
+        }
+        .btn-edit-profile:hover { background: #d4edc9; }
+
+        /* ====== Modal ====== */
+        .modal-overlay {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.3); z-index: 1000;
+            justify-content: center; align-items: center;
+        }
+        .modal-overlay.show { display: flex; }
+        .modal-card {
+            background: var(--white); border-radius: 16px; padding: 32px;
+            width: 400px; max-width: 90vw;
+            box-shadow: 0 8px 40px rgba(0,0,0,0.12);
+        }
+        .modal-card h3 { font-size: 18px; color: #1a3a1a; margin-bottom: 20px; text-align: center; }
+        .modal-card .form-group { margin-bottom: 14px; text-align: left; }
+        .modal-card .form-group label { display: block; font-size: 13px; color: var(--text); font-weight: 600; margin-bottom: 5px; }
+        .modal-card .form-group label .optional { color: var(--text-light); font-weight: 400; }
+        .modal-card .form-group input {
+            width: 100%; padding: 10px 14px; border-radius: 10px;
+            border: 1px solid var(--border); background: #f9faf9;
+            color: var(--text); font-size: 14px; outline: none;
+            transition: all 0.2s;
+        }
+        .modal-card .form-group input:focus {
+            border-color: var(--green);
+            box-shadow: 0 0 0 3px rgba(75,180,45,0.08);
+            background: #fff;
+        }
+        .modal-actions { display: flex; gap: 10px; justify-content: center; margin-top: 20px; }
+        .modal-actions button {
+            padding: 10px 24px; border-radius: 10px; border: none;
+            font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s;
+        }
+        .btn-save {
+            background: linear-gradient(135deg, var(--green), var(--green-dark));
+            color: #fff; box-shadow: 0 2px 12px rgba(75,180,45,0.25);
+        }
+        .btn-save:hover { transform: translateY(-1px); }
+        .btn-save:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+        .btn-cancel { background: #f3f4f6; color: var(--text); }
+        .btn-cancel:hover { background: #e5e7eb; }
+        .modal-error { color: #dc2626; font-size: 13px; text-align: center; margin-top: 10px; min-height: 20px; }
+        .modal-success { color: #4bb42d; font-size: 13px; text-align: center; margin-top: 10px; min-height: 20px; }
 
         /* ====== Chat Area ====== */
         .chat-area {
@@ -243,9 +292,11 @@
             <div class="user-info">
                 👤 <strong id="displayUsername"></strong>
                 <span class="role-badge" id="displayRole"></span>
+                <span style="font-size:12px;color:var(--text-light);" id="displayDept"></span>
             </div>
             <div class="bar-actions">
                 <a class="btn-admin" id="btnAdmin" href="/admin/" style="display:none;">管理后台</a>
+                <button class="btn-edit-profile" onclick="openProfileModal()">编辑资料</button>
                 <button class="btn-logout" onclick="doLogout()">登出</button>
             </div>
         </div>
@@ -277,6 +328,35 @@
             <button class="icon-btn" id="uploadBtn" onclick="document.getElementById('fileInput').click()" title="上传文件">📎</button>
             <button class="icon-btn" id="voiceBtn" onclick="toggleVoice()" title="语音输入">🎤</button>
             <button class="send-btn" id="sendBtn" onclick="sendMessage()">发 送</button>
+        </div>
+    </div>
+
+    <!-- Profile Edit Modal -->
+    <div class="modal-overlay" id="profileModal">
+        <div class="modal-card">
+            <h3>编辑个人资料</h3>
+            <div class="form-group">
+                <label>用户名</label>
+                <input type="text" id="profileUsername" placeholder="2-20字符，支持中文、字母、数字、下划线">
+            </div>
+            <div class="form-group">
+                <label>邮箱 <span class="optional">(选填)</span></label>
+                <input type="email" id="profileEmail" placeholder="用于找回密码">
+            </div>
+            <div class="form-group">
+                <label>新密码 <span class="optional">(不修改请留空)</span></label>
+                <input type="password" id="profilePassword" placeholder="至少8位纯数字">
+            </div>
+            <div class="form-group">
+                <label>确认新密码</label>
+                <input type="password" id="profileConfirm" placeholder="再次输入新密码">
+            </div>
+            <div class="modal-actions">
+                <button class="btn-cancel" onclick="closeProfileModal()">取消</button>
+                <button class="btn-save" id="btnSaveProfile" onclick="saveProfile()">保存</button>
+            </div>
+            <div class="modal-success" id="profileMsg"></div>
+            <div class="modal-error" id="profileErr"></div>
         </div>
     </div>
 
@@ -313,6 +393,9 @@
                         const roleBadge = document.getElementById('displayRole');
                         roleBadge.textContent = user.role_name;
                         roleBadge.className = 'role-badge role-' + user.role;
+                        if (user.department_name) {
+                            document.getElementById('displayDept').textContent = ' | ' + user.department_name;
+                        }
                         document.getElementById('userBar').style.display = 'flex';
                         if (user.role === 'super_admin') {
                             document.getElementById('btnAdmin').style.display = 'inline';
@@ -331,6 +414,78 @@
         async function doLogout() {
             await fetch('/api/logout', { method: 'POST' });
             window.location.href = '/login';
+        }
+
+        async function openProfileModal() {
+            document.getElementById('profileErr').textContent = '';
+            document.getElementById('profileMsg').textContent = '';
+            document.getElementById('profilePassword').value = '';
+            document.getElementById('profileConfirm').value = '';
+            try {
+                const resp = await fetch('/api/me');
+                const data = await resp.json();
+                if (data.success && data.user) {
+                    document.getElementById('profileUsername').value = data.user.username || '';
+                    document.getElementById('profileEmail').value = data.user.email || '';
+                }
+            } catch (e) {}
+            document.getElementById('profileModal').classList.add('show');
+        }
+
+        function closeProfileModal() {
+            document.getElementById('profileModal').classList.remove('show');
+        }
+
+        async function saveProfile() {
+            const username = document.getElementById('profileUsername').value.trim();
+            const email = document.getElementById('profileEmail').value.trim() || null;
+            const password = document.getElementById('profilePassword').value;
+            const confirm = document.getElementById('profileConfirm').value;
+            const errEl = document.getElementById('profileErr');
+            const msgEl = document.getElementById('profileMsg');
+            const btn = document.getElementById('btnSaveProfile');
+            errEl.textContent = '';
+            msgEl.textContent = '';
+
+            if (password) {
+                if (password.length < 8 || !/^\d+$/.test(password)) {
+                    errEl.textContent = '密码需要至少8位纯数字'; return;
+                }
+                if (password !== confirm) {
+                    errEl.textContent = '两次密码输入不一致'; return;
+                }
+            }
+
+            btn.disabled = true; btn.textContent = '保存中...';
+            try {
+                const body = {};
+                if (username) body.username = username;
+                if (email !== undefined) body.email = email;
+                if (password) body.password = password;
+                const resp = await fetch('/api/me/update', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                });
+                const data = await resp.json();
+                if (data.success) {
+                    loadUserInfo();
+                    msgEl.textContent = '资料已更新';
+                    if (data.user) {
+                        document.getElementById('profileUsername').value = data.user.username || '';
+                        if (data.user.email !== undefined) {
+                            document.getElementById('profileEmail').value = data.user.email || '';
+                        }
+                    }
+                    document.getElementById('profilePassword').value = '';
+                    document.getElementById('profileConfirm').value = '';
+                } else {
+                    errEl.textContent = data.error || '保存失败';
+                }
+            } catch (e) {
+                errEl.textContent = '请求失败：' + (e.message || '网络错误');
+            } finally {
+                btn.disabled = false; btn.textContent = '保存';
+            }
         }
 
         loadUserInfo();
@@ -385,9 +540,38 @@
             let fullText = text;
 
             if (pendingFiles.length > 0) {
-                addMessage('user', '📎 正在上传 ' + pendingFiles.length + ' 个文件...');
+                const excelFiles = pendingFiles.filter(f => {
+                    const ext = f.name.split('.').pop().toLowerCase();
+                    return ext === 'xlsx' || ext === 'xls';
+                });
+                const otherFiles = pendingFiles.filter(f => {
+                    const ext = f.name.split('.').pop().toLowerCase();
+                    return ext !== 'xlsx' && ext !== 'xls';
+                });
+
                 const uploadedPaths = [];
-                for (const file of pendingFiles) {
+
+                // Excel 文件走专用接口
+                for (const file of excelFiles) {
+                    try {
+                        addMessage('user', '📊 正在解析 Excel: ' + file.name + ' ...');
+                        const formData = new FormData();
+                        formData.append('file', file);
+                        const resp = await fetch('/api/excel/upload', { method: 'POST', body: formData });
+                        const data = await resp.json();
+                        if (data.success) {
+                            uploadedPaths.push('[Excel已导入: ' + file.name + ' | ' +
+                                data.sheet_count + '个工作表 | ' + data.total_rows + '行数据 | 导入ID: ' + data.import_id + ']');
+                        } else {
+                            uploadedPaths.push('[Excel上传失败: ' + (data.error || '未知错误') + ']');
+                        }
+                    } catch (e) {
+                        uploadedPaths.push('[Excel上传失败: ' + e.message + ']');
+                    }
+                }
+
+                // 普通文件走原有接口
+                for (const file of otherFiles) {
                     try {
                         const formData = new FormData();
                         formData.append('file', file);
@@ -402,9 +586,10 @@
                         uploadedPaths.push('[上传失败: ' + e.message + ']');
                     }
                 }
+
                 if (uploadedPaths.length > 0) {
                     const fileInfo = '\\n\\n[已上传文件: ' + uploadedPaths.join(', ') + ']';
-                    fullText = (text || '请帮我看看上传的文件') + fileInfo;
+                    fullText = (text || '请帮我处理上传的文件') + fileInfo;
                 }
                 pendingFiles = [];
                 uploadPreview.classList.remove('show');
@@ -445,10 +630,16 @@
             pendingFiles = Array.from(files);
             const names = pendingFiles.map(f => f.name).join(', ');
             const size = pendingFiles.reduce((s, f) => s + f.size, 0);
-            uploadPreview.textContent = '📎 已选择: ' + names + ' (' + formatSize(size) + ')';
+            const excelCount = pendingFiles.filter(f => {
+                const ext = f.name.split('.').pop().toLowerCase();
+                return ext === 'xlsx' || ext === 'xls';
+            }).length;
+            const prefix = excelCount > 0 ? '📊 检测到 ' + excelCount + ' 个Excel文件，将自动解析入库 | ' : '📎 ';
+            uploadPreview.textContent = prefix + '已选择: ' + names + ' (' + formatSize(size) + ')';
             uploadPreview.classList.add('show');
             if (!inputBox.value.trim()) {
-                inputBox.value = '请帮我处理上传的文件: ' + names;
+                const prompt = excelCount > 0 ? '请帮我查询已导入的表格数据' : '请帮我处理上传的文件: ' + names;
+                inputBox.value = prompt;
                 inputBox.focus();
             }
         }

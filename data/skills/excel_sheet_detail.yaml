@@ -1,0 +1,19 @@
+name: excel_sheet_detail
+description: 查看某个已导入 Excel 的工作表详情和数据
+min_role: staff
+priority: 9
+category: excel
+intent_patterns:
+  - (查看|显示|打开|浏览).*(工作表|sheet|表格|数据).*(内容|详情|明细|数据)
+  - (查看|显示).*(导入|excel).*(详情|内容)
+  - (导入|编号|id).*\d+.*(详情|内容|工作表)
+  - 第?\d+号?.*(导入|表格|excel|工作表)
+intent_keywords:
+  - 工作表详情
+  - 查看表格
+  - 表格内容
+  - 导入详情
+  - 浏览数据
+handler:
+  type: function
+  function: excel_handlers.skill_sheet_detail

@@ -53,6 +53,7 @@ except ImportError:
 # 导入工具模块
 import tools
 import auth as auth_module
+import excel_handlers
 
 HOST = '0.0.0.0'
 PORT = int(os.environ.get('SERVER_PORT', 8888))
@@ -563,10 +564,12 @@ class RequestHandler(BaseHTTPRequestHandler):
             role = qs.get('role', [None])[0]
             dept_id = qs.get('department_id', [None])[0]
             active = qs.get('active', [None])[0]
+            approval_status = qs.get('approval_status', [None])[0]
             users = auth_module.list_users(
                 role=role,
                 department_id=int(dept_id) if dept_id else None,
-                active=active.lower() == 'true' if active else None
+                active=active.lower() == 'true' if active else None,
+                approval_status=approval_status,
             )
             self._send_json(200, {'success': True, 'users': users})
         elif parsed.path == '/api/admin/departments':
@@ -583,6 +586,77 @@ class RequestHandler(BaseHTTPRequestHandler):
                 action=qs.get('action', [None])[0],
             )
             self._send_json(200, {'success': True, 'logs': logs})
+        elif parsed.path == '/api/excel/list':
+            user = self._require_role('staff')
+            if user is None: return
+            qs = parse_qs(parsed.query)
+            filters = {
+                'uploaded_by': qs.get('uploaded_by', [None])[0],
+                'status': qs.get('status', ['active'])[0],
+                'limit': qs.get('limit', [50])[0],
+                'offset': qs.get('offset', [0])[0],
+            }
+            result = excel_handlers.list_imports(user, filters)
+            self._send_json(200, result)
+        elif parsed.path == '/api/excel/search':
+            user = self._require_role('staff')
+            if user is None: return
+            qs = parse_qs(parsed.query)
+            result = excel_handlers.search_excel(
+                qs.get('q', [''])[0],
+                {'limit': qs.get('limit', [50])[0],
+                 'import_id': qs.get('import_id', [None])[0]}
+            )
+            self._send_json(200, result)
+        elif parsed.path.startswith('/api/excel/sheets/'):
+            user = self._require_role('staff')
+            if user is None: return
+            try:
+                import_id = int(parsed.path.rsplit('/', 1)[-1])
+            except (ValueError, IndexError):
+                self._send_json(400, {'success': False, 'error': '无效的导入ID'})
+                return
+            result = excel_handlers.get_sheets(import_id)
+            self._send_json(200, result)
+        elif parsed.path.startswith('/api/excel/data/'):
+            user = self._require_role('staff')
+            if user is None: return
+            try:
+                sheet_id = int(parsed.path.rsplit('/', 1)[-1])
+            except (ValueError, IndexError):
+                self._send_json(400, {'success': False, 'error': '无效的工作表ID'})
+                return
+            qs = parse_qs(parsed.query)
+            result = excel_handlers.get_rows(sheet_id, {
+                'limit': qs.get('limit', [100])[0],
+                'offset': qs.get('offset', [0])[0],
+                'search': qs.get('search', [''])[0],
+                'order_by': qs.get('order_by', [None])[0],
+                'order_dir': qs.get('order_dir', ['asc'])[0],
+            })
+            self._send_json(200, result)
+        elif parsed.path.startswith('/api/excel/export/'):
+            user = self._require_role('staff')
+            if user is None: return
+            try:
+                sheet_id = int(parsed.path.rsplit('/', 1)[-1])
+            except (ValueError, IndexError):
+                self._send_json(400, {'success': False, 'error': '无效的工作表ID'})
+                return
+            result = excel_handlers.export_csv(sheet_id)
+            if result['success']:
+                csv_body = result['csv'].encode('utf-8-sig')
+                safe_name = result['sheet_name'].replace('"', '').replace('\\', '')
+                self.send_response(200)
+                self.send_header('Content-Type', 'text/csv; charset=utf-8')
+                self.send_header('Content-Length', str(len(csv_body)))
+                self.send_header('Content-Disposition',
+                    f'attachment; filename="{safe_name}.csv"')
+                self._set_cors_headers()
+                self.end_headers()
+                self.wfile.write(csv_body)
+            else:
+                self._send_json(400, result)
         else:
             body = b'Not Found'
             self.send_response(404)
@@ -646,11 +720,44 @@ class RequestHandler(BaseHTTPRequestHandler):
                 tools.save_session(session_id, [], SESSION_TTL)
             self._send_json(200, {'success': True, 'message': '对话已清空'})
 
+        elif parsed.path == '/api/me/update':
+            user = self._require_auth()
+            if user is None: return
+            content_length = int(self.headers.get('Content-Length', 0))
+            body = self.rfile.read(content_length).decode('utf-8')
+            try:
+                data = json.loads(body)
+                username = data.get('username')
+                email = data.get('email')
+                password = data.get('password')
+            except json.JSONDecodeError:
+                self._send_json(400, {'success': False, 'error': '请求格式错误'})
+                return
+            try:
+                updated = auth_module.update_own_profile(user['id'], username=username, email=email, password=password)
+                self._send_json(200, {'success': True, 'user': updated, 'message': '资料已更新'})
+            except ValueError as e:
+                self._send_json(400, {'success': False, 'error': str(e)})
+
         elif parsed.path == '/api/upload':
             self._handle_upload(content_type)
 
         elif parsed.path == '/api/speech':
             self._handle_speech(content_type)
+
+        elif parsed.path == '/api/excel/upload':
+            self._handle_excel_upload(content_type)
+
+        elif parsed.path.startswith('/api/excel/delete/'):
+            user = self._require_role('gm')
+            if user is None: return
+            try:
+                import_id = int(parsed.path.rsplit('/', 1)[-1])
+            except (ValueError, IndexError):
+                self._send_json(400, {'success': False, 'error': '无效的导入ID'})
+                return
+            result = excel_handlers.delete_import(import_id, user)
+            self._send_json(200, result)
 
         elif parsed.path.startswith('/api/admin/'):
             user = self._require_role('super_admin')
@@ -691,6 +798,13 @@ class RequestHandler(BaseHTTPRequestHandler):
                     if 'is_active' in data:
                         auth_module.toggle_user_active(user_id, data['is_active'], operator_id=op_id)
                     self._send_json(200, {'success': True, 'message': '用户已更新'})
+                except ValueError as e:
+                    self._send_json(400, {'success': False, 'error': str(e)})
+            elif parsed.path.startswith('/api/admin/users/') and parsed.path.endswith('/approve'):
+                user_id = int(parsed.path.split('/')[-2])
+                try:
+                    auth_module.approve_user(user_id, data.get('approved', False), operator_id=op_id)
+                    self._send_json(200, {'success': True, 'message': '审批完成'})
                 except ValueError as e:
                     self._send_json(400, {'success': False, 'error': str(e)})
             elif parsed.path.startswith('/api/admin/users/') and parsed.path.endswith('/delete'):
@@ -913,6 +1027,111 @@ class RequestHandler(BaseHTTPRequestHandler):
         except Exception:
             self._send_json(400, {'success': False, 'error': '无法解析上传的文件'})
 
+    # ---- Excel 上传 ----
+
+    def _handle_excel_upload(self, content_type):
+        """处理 Excel 上传：解析并存入数据库"""
+        user = self._require_auth()
+        if user is None: return
+        if auth_module.get_role_level(user['role']) < auth_module.get_role_level('staff'):
+            self._send_json(403, {'success': False, 'error': '权限不足：职员及以上可上传'})
+            return
+
+        content_length = int(self.headers.get('Content-Length', 0))
+        if content_length > UPLOAD_MAX_SIZE:
+            self._send_json(413, {'success': False, 'error': f'文件太大，最大允许 {UPLOAD_MAX_SIZE // (1024*1024)}MB'})
+            return
+
+        body = self.rfile.read(content_length)
+
+        if 'multipart/form-data' not in content_type:
+            self._send_json(400, {'success': False, 'error': '请使用 multipart/form-data 格式上传'})
+            return
+
+        boundary = None
+        for part in content_type.split(';'):
+            part = part.strip()
+            if part.startswith('boundary='):
+                boundary = part[len('boundary='):].strip('"')
+                break
+        if not boundary:
+            self._send_json(400, {'success': False, 'error': '缺少 boundary'})
+            return
+
+        boundary_bytes = ('--' + boundary).encode('utf-8')
+        end_boundary_bytes = ('--' + boundary + '--').encode('utf-8')
+
+        # 提取 multipart 参数
+        header_row = 0
+        import_notes = ''
+        # 从 Content-Type header 旁边提取自定义参数（如果客户端用 query string 传入）
+        # 也可以通过 multipart 内部的 form fields 传递
+
+        parts = body.split(boundary_bytes)
+        file_found = False
+        for part in parts:
+            if not part or part == b'--' or part == b'--\r\n':
+                continue
+            if part == end_boundary_bytes:
+                break
+
+            if b'\r\n\r\n' in part:
+                header_section, file_data = part.split(b'\r\n\r\n', 1)
+                header_text = header_section.decode('utf-8', errors='replace')
+
+                # 去掉尾部的 boundary
+                if file_data.endswith(b'\r\n'):
+                    file_data = file_data[:-2]
+                if b'\r\n--' in file_data:
+                    file_data = file_data[:file_data.rfind(b'\r\n--')]
+
+                # 解析 name 判断是文件还是参数
+                name = ''
+                filename = ''
+                for line in header_text.split('\r\n'):
+                    if 'Content-Disposition' in line:
+                        for item in line.split(';'):
+                            item = item.strip()
+                            if item.startswith('name="'):
+                                name = item[len('name="'):].rstrip('"')
+                            if item.startswith('filename="'):
+                                filename = item[len('filename="'):].rstrip('"')
+
+                if filename and name == 'file':
+                    # 这是文件字段
+                    file_found = True
+                    # 检查文件类型
+                    ext = os.path.splitext(filename)[1].lower()
+                    if ext not in ('.xlsx', '.xls'):
+                        self._send_json(400, {'success': False, 'error': f'不支持的文件类型: {ext}，请上传 .xlsx 或 .xls 文件'})
+                        return
+
+                    tools.set_file_context(user)
+                    try:
+                        result = excel_handlers.handle_upload(
+                            user, file_data, filename,
+                            import_notes=import_notes,
+                            header_row=header_row,
+                        )
+                    finally:
+                        tools.clear_file_context()
+                    self._send_json(200, result)
+                    return
+
+                elif name == 'header_row' and not filename:
+                    try:
+                        header_row = int(file_data.decode('utf-8').strip())
+                    except (ValueError, UnicodeDecodeError):
+                        pass
+                elif name == 'import_notes' and not filename:
+                    try:
+                        import_notes = file_data.decode('utf-8').strip()
+                    except UnicodeDecodeError:
+                        pass
+
+        if not file_found:
+            self._send_json(400, {'success': False, 'error': '未找到 Excel 文件，请使用 file 字段上传'})
+
     # ---- 语音转文字 ----
 
     def _handle_speech(self, content_type):
@@ -1126,13 +1345,15 @@ class RequestHandler(BaseHTTPRequestHandler):
             username = data.get('username', '').strip()
             password = data.get('password', '')
             email = data.get('email', '').strip() or None
+            role = data.get('role', 'guest')
+            department_id = data.get('department_id')
         except json.JSONDecodeError:
             self._send_json(400, {'success': False, 'error': '请求格式错误'})
             return
 
         try:
-            user = auth_module.register_user(username, password, email)
-            self._send_json(200, {'success': True, 'user': user, 'message': '注册成功'})
+            user = auth_module.register_user(username, password, email, role, department_id)
+            self._send_json(200, {'success': True, 'user': user, 'approval_pending': True, 'message': '注册成功，请等待管理员审批'})
         except ValueError as e:
             self._send_json(400, {'success': False, 'error': str(e)})
 
